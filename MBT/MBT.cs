@@ -17,9 +17,6 @@ namespace MBT;
 
 /// <summary>
 /// MBT v1
-/// Still need to incorporate /bc
-/// and implement /mbt ft and /mbt fd
-/// after those 2 are working then create repo and share with andy
 /// </summary>
 
 public class MBT : IDalamudPlugin
