@@ -1,9 +1,7 @@
-﻿using Dalamud.Game.ClientState.Objects.Types;
-using Dalamud.Game.Command;
+﻿using Dalamud.Game.Command;
 using Dalamud.Game.Text;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
-using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using System;
 using System.Collections.Generic;
@@ -12,12 +10,17 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 using TinyIpc.Messaging;
-using ClickLib.Clicks;
 using static MBT.DalamudAPI;
 using System.IO;
 using DotRecast.Core.Numerics;
 using DotRecast.Detour;
-
+using Dalamud.Game.ClientState.Conditions;
+using System.Text.Json;
+using System.Threading.Tasks;
+using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using ClickLib.Clicks;
+using Dalamud.Game.ClientState.Objects.Types;
+using static Lumina.Data.Parsing.Layer.LayerCommon;
 namespace MBT;
 
 /// <summary>
@@ -26,29 +29,11 @@ namespace MBT;
 
 public class MBT : IDalamudPlugin
 {
-    public string textFollow1 = "";
-    public string textTest = "";
-    public string inputSelectiveCharacter = "";
-    public string inputStart = "";
-    public string inputEnd = "";
+    public bool stopNavigating = false;
     public string teleportPOS = "";
     public string speedBase = "";
     public List<string> ListBoxText { get; set; } = new List<string>();
-    public bool inviteAccept = false;
-    public bool inviteAcceptSelective = false;
-    public string addSelectiveInviteTextInput = "";
-    public Vector4 textFollow1Color = new(255f, 0f, 0f, 1f);
-    public string textFollow2 = "";
-    public Vector4 textFollow2Color = new(255f, 0f, 0f, 1f);
-    public string textFollow3 = "";
-    public Vector4 textFollow3Color = new(255f, 0f, 0f, 1f);
-    public bool follow = false;
-    public bool following = false;
-    private bool spreading = false;
-    public int followDistance = 1;
-    public string followTarget = "";
-    public bool targetFollowTargetsTargets = false;
-    public GameObject? followTargetObject = null;
+    public List<string> ListBoxPOSText { get; set; } = new List<string>();
     private delegate void ExitDutyDelegate(char timeout);
     private ExitDutyDelegate exitDuty;
 
@@ -64,7 +49,7 @@ public class MBT : IDalamudPlugin
     TinyMessageBus messagebus3 = new("DalamudBroadcasterSpread");
 
     XIVRunner.XIVRunner _runner;
-
+    XIVRunner.XIVRunner _runnerIC;
     public MBT(
         DalamudPluginInterface pluginInterface)
     {
@@ -74,9 +59,14 @@ public class MBT : IDalamudPlugin
             Initialize(pluginInterface);
             _runner = XIVRunner.XIVRunner.Create(pluginInterface);
             _runner.Enable = true;
-            _runner.Precision = followDistance + .1f;
+            _runner.Precision = .1f;
             _runner.UseMount = false;
             _runner.TryJump = false;
+            _runnerIC = XIVRunner.XIVRunner.Create(pluginInterface);
+            _runnerIC.Enable = true;
+            _runnerIC.Precision = .1f;
+            _runnerIC.UseMount = false;
+            _runnerIC.TryJump = false;
             //Create MainWindow UI
             MainWindow = new MainWindow(this);
             WindowSystem.AddWindow(MainWindow);
@@ -87,13 +77,9 @@ public class MBT : IDalamudPlugin
                 HelpMessage = "/bc fw=toon1,toon2,ETC or all or allbutme or allbut,toon1,toon2,ETC (Remove Space from ToonsFullName) C=/commandname args\"\n" +
                 "example: /bc FW=ALL C=/mbt ft Toon Name"
             });
-                CommandManager.AddHandler("/mbt", new CommandInfo(OnCommand)
+            CommandManager.AddHandler("/mbt", new CommandInfo(OnCommand)
             {
                 HelpMessage = "/mbt -> opens main window\n" +
-                "/mbt follow on/off -> turns follow on or off\n" +
-                "/mbt target on/off - >turns target on or off\n" +
-                "/mbt followtarget Player Name -> sets follow target to Player Name\n" +
-                "/mbt followdistance # -> sets Follow distance to # (must be int)\n" +
                 "/mbt spread -> Spreads toons away from LocalPlayer\n" +
                 "/mbt exitduty -> Immediately exits the duty\n" +
                 "/mbt acceptduty -> Immediately accepts the duty finder popup\n"
@@ -101,12 +87,13 @@ public class MBT : IDalamudPlugin
 
             //Draw UI
             PluginInterface.UiBuilder.Draw += DrawUI;
+            PluginInterface.UiBuilder.OpenMainUi += OpenMainUI;
             ChatCommand.Initialize();
             //Attach our OnGameFrameworkUpdate function to our game's Framework Update (called once every frame)
-            Framework.Update += OnGameFrameworkUpdate;
-
+            //Framework.Update += OnGameFrameworkUpdate;
+            //Condition.ConditionChange += Condition_OnConditionChange;
             //messagebus1.MessageReceived +=
-                //(sender, e) => MessageReceived(Encoding.UTF8.GetString((byte[])e.Message));
+            //(sender, e) => MessageReceived(Encoding.UTF8.GetString((byte[])e.Message));
             messagebus2.MessageReceived +=
                 (sender, e) => MessageReceived(Encoding.UTF8.GetString((byte[])e.Message));
             messagebus3.MessageReceived +=
@@ -116,6 +103,8 @@ public class MBT : IDalamudPlugin
             SigScanner.ScanText("40 53 48 83 ec 20 48 8b 05 ?? ?? ?? ?? 0f b6 d9");
 
             this.exitDuty = Marshal.GetDelegateForFunctionPointer<ExitDutyDelegate>(exitDuty);
+
+            OpenMainUI();
         }
         catch (Exception e) { PluginLog.Info($"Failed loading plugin\n{e}"); }
     }
@@ -232,8 +221,6 @@ public class MBT : IDalamudPlugin
     {
         PluginLog.Info("MessageRecieved: " + message);
         if (ClientState.LocalPlayer == null) return;
-        follow = false;
-        spreading = true;
         var messageList = message.Split(',').ToList();
         var playerObjectId = ClientState.LocalPlayer.ObjectId;
         PluginLog.Info("messageList.Count: " + messageList.Count + " messageList[0]: " + messageList[0] + " messageList[1]: " + messageList[1] + " messageList[2]: " + messageList[2]);
@@ -259,210 +246,31 @@ public class MBT : IDalamudPlugin
             }
         }
     }
-    
-    public void SetTarget()
-    {
-        //If PlayerCharacter's target is not null, Set our followTarget InputText to our Target Object's .Name field
-        if (TargetManager.Target != null)
-        {
-            followTarget = TargetManager.Target.Name.ToString();
-        }
-    }
-    public void AddSelectiveInvite()
-    {
-        //Add name in Plugin.addSelectiveInviteTextInput
-        if (addSelectiveInviteTextInput != "")
-        {
-            //add to ListBox
-        }
-    }
-    public void SetFollowStatus(bool sts, string name, string distance, Vector4 color)
-    {
-        //Set UI TextColored's Values
-        string? FollowingSTS;
-        if (sts)
-            FollowingSTS = "On";
-        else
-            FollowingSTS = "Off";
-        textFollow1 = " " + FollowingSTS;
-        textFollow2 = "Name: " + name;
-        textFollow3 = "Distance: " + distance + " <= " + followDistance;
-        textFollow1Color = color;
-        textFollow2Color = color;
-        textFollow3Color = color;
-    }
-
-    public bool GetFollowTargetObject()
-    {
-        //Get all spawned objects into obj and pull the object with the Name == followTarget
-        //If there are none display not found and return false otherwise grab the first object
-        //in the list with that name and set it to your global followTargetObject
-        var obj = ObjectTable;
-        if (obj == null) return false;
-        if (followTarget == null) return false;
-        if (followTargetObject != null)
-        {
-            if (obj.Contains(followTargetObject) && followTargetObject.Name.Equals(followTarget))
-                return true;
-        }
-
-        var ftarget = obj.Where(s => s.Name.ToString() == followTarget);
-        if (!ftarget.Any())
-        {
-            followTargetObject = null;
-            SetFollowStatus(false, followTarget + " not found", "0", new(255f, 0f, 0f, 1f));
-            if (following)
-                _runner.NaviPts.Clear();
-            return false;
-        }
-        var ftar = ftarget.ToList();
-        followTargetObject = ftar[0];
-        return true;
-    }
-
-    public void OnGameFrameworkUpdate(IFramework framework)
-    {
-        //InviteAccept  ----  Need to add a tab for this and a list box to input safe names, if they want, and then check that, and of course a on off checkbox
-        //Also need a option for AcceptRes just the same
-        if (inviteAccept)
-        { 
-            string text = "Invites";
-            List<string> textList = text.Split(' ').ToList();
-            var addon = GetSpecificYesno(textList);
-            if (addon != -1)
-                ClickSelectYesNo.Using(addon).Yes();
-        }
-        //If follow is not enabled clear TextColored's and return
-        return;
-        if (!follow && !targetFollowTargetsTargets)
-        {
-            SetFollowStatus(false, "", "", new(255f, 0f, 0f, 1f));
-            if (_runner.MovingValid && !spreading)
-                _runner.NaviPts.Clear();
-            return;
-        }
-
-        //If LocalPlayer object is null return (we are not logged in or between zones etc..)
-        if (ClientState.LocalPlayer == null) return;
-
-        //If followTarget is not empty GetFollowTargetObject then set our player variable and calculate the distance
-        //between player and followTargetObject and if distance > followDistance move to the followTargetObject
-        if (!string.IsNullOrEmpty(followTarget))
-        {
-            try
-            {
-                /// Need to figure out how to handle this
-                /// because if the Object leaves the zone it
-                /// sorta leaves a ghost GO that is still .IsValid
-                /// and all its data is locked to where it was
-                /// when it left the zone, this current way is
-                /// gross and very inefficient
-                
-                if (!GetFollowTargetObject())
-                    return;
-                if (followTargetObject == null) return;
-                
-                var player = ClientState.LocalPlayer;
-
-                if (targetFollowTargetsTargets)
-                {                    
-                    if (player.TargetObjectId != followTargetObject.TargetObjectId && followTargetObject.TargetObjectId != 0)
-                    {
-                        PluginLog.Info("1");
-                        TargetManager.Target = followTargetObject.TargetObject;
-                        PluginLog.Info("Follow:" + followTargetObject.TargetObject.Name);
-
-                    }
-                }
-                if (!follow)
-                {
-                    SetFollowStatus(false, "", "", new(255f, 0f, 0f, 1f));
-                    if (_runner.MovingValid && !spreading)
-                        _runner.NaviPts.Clear();
-                    return;
-                }
-                var distance = Convert.ToInt32(Vector3.Distance(new Vector3(player.Position.X, player.Position.Y, player.Position.Z), new Vector3(followTargetObject.Position.X, followTargetObject.Position.Y, followTargetObject.Position.Z)));
-
-                SetFollowStatus(true, followTargetObject.Name.ToString(), distance.ToString(), new(0f, 255f, 0f, 1f));
-
-                if ((distance > (followDistance + .1f)) && distance < 100)
-                {
-                    following = true;
-                    //Move.Move.MoveTo(true, followTargetObject.Position, followDistance);
-                    _runner.Precision = followDistance + .1f;
-                    //_runner.NaviPts.Clear();
-                    _runner.NaviPts.Enqueue(followTargetObject.Position);
-                }
-                else if (following)
-                {
-                    following = false;
-                    //Move.Move.MoveTo(false);
-                    _runner.NaviPts.Clear();
-                }
-            }
-            catch (Exception e)
-            {
-                PluginLog.Error(e.ToString());
-                SetFollowStatus(false, "", "", new(255f, 0f, 0f, 1f));
-                if (following)
-                    _runner.NaviPts.Clear();
-                //throw;
-            }
-        }
-        else
-        {
-            SetFollowStatus(false, "No follow target set", "", new(255f, 0f, 0f, 1f));
-            if (following)
-                _runner.NaviPts.Clear();
-        }
-    }
-
     public void Dispose()
     {
         //RemoveAllWindows and Dispose of them, Disable FrameworkUpdate and remove Commands and change back to Legacy if needed
         WindowSystem.RemoveAllWindows();
         ((IDisposable)MainWindow).Dispose();
-        Framework.Update -= OnGameFrameworkUpdate;
+        //Framework.Update -= OnGameFrameworkUpdate;
+        //Condition.ConditionChange -= Condition_OnConditionChange;
         CommandManager.RemoveHandler("/mbt"); 
         CommandManager.RemoveHandler("/bc");
         _runner.NaviPts.Clear();
+        _runnerIC.NaviPts.Clear();
         messagebus1.Dispose();
         messagebus2.Dispose();
         _runner?.Dispose();
+        _runnerIC?.Dispose();
     }
-
+    private void OpenMainUI()
+    {
+        MainWindow.IsOpen = true;
+    }
     private void OnCommand(string command, string args)
     {
         //In response to the slash command, just display our main ui or turn Follow on or off
-        if (args.ToUpper().Contains("FOLLOW ON"))
-        {
-            follow = true;
-            spreading = false;
-            _runner.NaviPts.Clear();
-        }
-        else if (args.ToUpper().Contains("FOLLOW OFF"))
-        {
-            follow = false;
-            following = false;
-            _runner.NaviPts.Clear();
-        }
-        else if (args.ToUpper().Contains("TARGET ON"))
-        {
-            targetFollowTargetsTargets = true;
-        }
-        else if (args.ToUpper().Contains("TARGET OFF"))
-        {
-            targetFollowTargetsTargets = false;
-        }
-        else if (args.ToUpper().Contains("FOLLOWTARGET"))
-        {
-            followTarget = args[13..];
-        }
-        else if (args.ToUpper().Contains("FOLLOWDISTANCE"))
-        {
-            followDistance = Convert.ToInt32(args[15..]);
-        }
-        else if (args.ToUpper().Contains("SPREAD"))
+ 
+        if (args.ToUpper().Contains("SPREAD"))
         {
             _runner.NaviPts.Clear();
             Spread();
@@ -510,14 +318,14 @@ public class MBT : IDalamudPlugin
         //Draw Window
         this.WindowSystem.Draw();
     }
-    public unsafe void Up()
+    public unsafe void teleportX(int amount)
     {
         //Teleport
         try
         {
 
             var player = ClientState.LocalPlayer;
-            SetPos.SetPosPos(player.Position + new Vector3(0, 1,
+            SetPos.SetPosPos(player.Position + new Vector3(amount, 0,
             0));
         }
         catch (Exception e)
@@ -526,14 +334,15 @@ public class MBT : IDalamudPlugin
             //throw;
         }
     }
-    public unsafe void Down()
+    
+    public unsafe void teleportY(int amount)
     {
         //Teleport
         try
         {
 
             var player = ClientState.LocalPlayer;
-            SetPos.SetPosPos(player.Position + new Vector3(0, -1,
+            SetPos.SetPosPos(player.Position + new Vector3(0, amount,
             0));
         }
         catch (Exception e)
@@ -542,15 +351,15 @@ public class MBT : IDalamudPlugin
             //throw;
         }
     }
-    public unsafe void Left()
+    public unsafe void teleportZ(int amount)
     {
         //Teleport
         try
         {
 
             var player = ClientState.LocalPlayer;
-            SetPos.SetPosPos(player.Position + new Vector3(-1, 0,
-            0));
+            SetPos.SetPosPos(player.Position + new Vector3(0, 0,
+            amount));
         }
         catch (Exception e)
         {
@@ -558,22 +367,8 @@ public class MBT : IDalamudPlugin
             //throw;
         }
     }
-    public unsafe void Right()
-    {
-        //Teleport
-        try
-        {
 
-            var player = ClientState.LocalPlayer;
-            SetPos.SetPosPos(player.Position + new Vector3(1, 0,
-            0));
-        }
-        catch (Exception e)
-        {
-            PluginLog.Error(e.ToString());
-            //throw;
-        }
-    }
+    
     public unsafe void TTarget()
     {
         //Teleport
@@ -604,12 +399,11 @@ public class MBT : IDalamudPlugin
             //throw;
         }
     }
-    public unsafe void TeleportPOS()
+    public unsafe void TeleportPOS(Vector3 telePos)
     {
         //Teleport
         try
         {
-            var telePos = new Vector3(float.Parse(teleportPOS.Split(',')[0]), float.Parse(teleportPOS.Split(',')[1]), float.Parse(teleportPOS.Split(',')[2]));
             SetPos.SetPosPos(telePos);
         }
         catch (Exception e)
@@ -619,39 +413,37 @@ public class MBT : IDalamudPlugin
             //throw;
         }
     }
-    public unsafe void AddEnd()
-    {
-        //Add End POS
-        inputEnd = ClientState.LocalPlayer.Position.ToString().Replace('<', ' ').Replace('>', ' ').Trim();
-    }
-    public unsafe void AddStart()
-    {
-        //Add Start POS
-        inputStart = ClientState.LocalPlayer.Position.ToString().Replace('<', ' ').Replace('>', ' ').Trim();
-    }
     public unsafe void AddPos()
     {
         //Add Start POS
         teleportPOS = ClientState.LocalPlayer.Position.ToString().Replace('<', ' ').Replace('>', ' ').Trim();
     }
-    public unsafe void Navigate()
+    public unsafe void Navigate(RcVec3f _startPos, RcVec3f _endPos)
     {
         //Navigate
         try
         {
-            string path = "navmesh.navmesh";
+            string path = ClientState.TerritoryType.ToString() + ".navmesh";
             FileStream fileStream = File.Open(path, FileMode.Open);
             var list = new List<DtStraightPath>();
             var nmd = new NavMeshDetour();
-            var startPos = new RcVec3f(float.Parse(inputStart.Split(',')[0]), float.Parse(inputStart.Split(',')[1]), float.Parse(inputStart.Split(',')[2]));
-            var endPos = new RcVec3f(float.Parse(inputEnd.Split(',')[0]), float.Parse(inputEnd.Split(',')[1]), float.Parse(inputEnd.Split(',')[2]));
-            list = nmd.QueryPath(startPos, endPos, fileStream);
+            list = nmd.QueryPath(_startPos, _endPos, fileStream);
             PluginLog.Info(list.Count.ToString());
             _runner.Enable = false;
-            foreach (var item in list)
+            if (list.Count > 2) 
             {
-                PluginLog.Info(item.pos.ToString());
-                Vector3 v3 = new Vector3(item.pos.X, item.pos.Y, item.pos.Z);
+                foreach (var item in list)
+                {
+                    PluginLog.Info(item.pos.ToString());
+                    var v3 = new Vector3(item.pos.X, item.pos.Y, item.pos.Z);
+                    _runner.NaviPts.Enqueue(v3);
+                }
+            }
+            else
+            {
+                var v3 = new Vector3(_startPos.X, _startPos.Y, _startPos.Z);
+                _runner.NaviPts.Enqueue(v3);
+                v3 = new Vector3(_endPos.X, _endPos.Y, _endPos.Z);
                 _runner.NaviPts.Enqueue(v3);
             }
             _runner.Enable = true;
@@ -662,11 +454,198 @@ public class MBT : IDalamudPlugin
             //throw;
         }
     }
+    public void StopNavigating()
+    {
+        _runner.Enable = false;
+        _runnerIC.Enable = false;
+        _runner.NaviPts.Clear();
+        _runnerIC.NaviPts.Clear();
+        stopNavigating = true;
+    }
+    public async void NavigatePath()
+    {
+        try
+        {
+            if (!File.Exists(ClientState.TerritoryType.ToString() + ".json")) return;
+            string json = File.ReadAllText(ClientState.TerritoryType.ToString() + ".json");
+            var path = JsonSerializer.Deserialize<List<string>>(json);
+            foreach (var item in path)
+            {
+                if(stopNavigating)
+                {
+                    stopNavigating = false;
+                    return;
+                }
+                var targetPos = new RcVec3f();
+                var stopForCombat = true;
+                var targetPosSet = false;
+                if (item.Split('|')[0].Equals("Wait"))
+                {
+                    if (item.Split('|')[1].Equals(""))
+                        await Task.Delay(50);
+                    else
+                        await Task.Delay(int.Parse(item.Split('|')[1]));
+                    continue;
+                }
+                else if (item.Split('|')[0].Equals("WaitFor"))
+                {
+                    if (item.Split('|')[1].Equals("BetweenAreas"))
+                    {
+                        while (Condition[ConditionFlag.BetweenAreas])
+                        {
+                            await Task.Delay(500);
+                            PluginLog.Information("Waiting for BetweenAreas");
+                            if (_runner.NaviPts.Count != 0)
+                                _runner.NaviPts.Clear();
+                        }
+                    }
+                    continue;
+                }
+                else if (item.Split('|')[0].Equals("Interactable"))
+                {
+                    await Task.Delay(2000);
+                    try
+                    {
+                        var baseObjs = ObjectTable.Where(x => x.Name.ToString().Contains(item.Split('|')[1]));
+                        if (baseObjs.Count() == 0)
+                            continue;
+
+                        var baseObj = baseObjs.First();
+                        if (baseObjs.Count() > 1)
+                        { 
+                            //get objectr with closest distance
+                            var closestDistance = 999999999999999;
+                            var player = ClientState.LocalPlayer;
+                            foreach (var Obj in baseObjs)
+                            {
+                                var distance = Convert.ToInt32(Vector3.Distance(new Vector3(player.Position.X, player.Position.Y, player.Position.Z), new Vector3(Obj.Position.X, Obj.Position.Y, Obj.Position.Z)));
+                                if (distance < closestDistance)
+                                {
+                                    closestDistance = distance;
+                                    baseObj = Obj;
+                                }
+                            }
+                        }
+                        var cnt = 0;
+                        while (cnt++ < 4)
+                        {
+                            InteractWithObject(baseObj);
+                            await Task.Delay(1000);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        PluginLog.Error(ex.ToString());
+                    }
+
+                    await Task.Delay(50);
+                    continue;
+                }
+                else if (item.Split('|')[0].Equals("SelectYesno"))
+                {
+                    try
+                    {
+                        nint addon;
+                        int cnt = 0;
+                        while ((addon = GameGui.GetAddonByName("SelectYesno", 1)) == 0 && (cnt++ < 500))
+                            await Task.Delay(10);
+                        if (addon == 0)
+                            continue;
+                        await Task.Delay(25);
+                        //PluginLog.Info("addon: "+addon.ToString());
+                        if (item.Split('|')[1].Equals(""))
+                            ClickSelectYesNo.Using(addon).Yes();
+                        else
+                        {
+                            if (item.Split('|')[1].ToUpper().Equals("YES"))
+                            {
+                                ClickSelectYesNo.Using(addon).Yes();
+                            }
+                            else if (item.Split('|')[1].ToUpper().Equals("NO"))
+                            {
+                                ClickSelectYesNo.Using(addon).No();
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        PluginLog.Error(ex.ToString());
+                    }
+                    await Task.Delay(50);
+                    continue;
+                }
+                else if (item.Split('|')[0].Equals("Boss"))
+                {
+                    stopForCombat = false;
+                    targetPosSet = true;
+                    if (item.Split('|')[1].Equals(""))
+                        targetPos = new RcVec3f(ClientState.LocalPlayer.Position.X, ClientState.LocalPlayer.Position.Y, ClientState.LocalPlayer.Position.Z);
+                    else
+                        targetPos = new RcVec3f(float.Parse(item.Split('|')[1].Split(',')[0]), float.Parse(item.Split('|')[1].Split(',')[1]), float.Parse(item.Split('|')[1].Split(',')[2]));
+                }
+                else if (item.Split('|')[0].Equals("MoveToObject"))
+                {
+                    var objs = ObjectTable.Where(x => x.Name.ToString().Contains(item.Split('|')[1]));
+                    if (objs.Count() == 0)
+                        continue;
+                    targetPosSet = true;
+                    targetPos = new RcVec3f(objs.First().Position.X, objs.First().Position.Y, objs.First().Position.Z);
+                }
+                
+                var playerPos = new RcVec3f(ClientState.LocalPlayer.Position.X, ClientState.LocalPlayer.Position.Y, ClientState.LocalPlayer.Position.Z);
+                if (!targetPosSet)
+                    targetPos = new RcVec3f(float.Parse(item.Split(',')[0]), float.Parse(item.Split(',')[1]), float.Parse(item.Split(',')[2]));
+                Navigate(playerPos, targetPos);
+                //wait for xivrunner queue to be empty
+                while (_runner.NaviPts.Count != 0)
+                {
+                    //PluginLog.Information("Waiting for navigation");w
+                    if (Condition[ConditionFlag.InCombat] && stopForCombat)
+                    {
+                        PluginLog.Information("Waiting for InCombat");
+                        _runner.Enable = false;
+                        _runnerIC.Enable = true;
+                        var playerPos2 = ClientState.LocalPlayer.Position;
+                        while (Condition[ConditionFlag.InCombat])
+                        {
+                            if (_runnerIC.NaviPts.Count == 0)
+                                _runnerIC.NaviPts.Enqueue(playerPos2);
+                            await Task.Delay(500);
+                        }
+                        _runnerIC.NaviPts.Clear();
+                        _runnerIC.Enable = false;
+                        _runner.Enable = true;
+                        //PluginLog.Information("Waiting for InCombat");
+
+                    }
+                    await Task.Delay(5);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error(ex.ToString());
+        }
+    }
+    public unsafe void InteractWithObject(GameObject baseObj)
+    {
+        try
+        {            
+            var convObj = (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)baseObj.Address;
+            TargetSystem.Instance()->InteractWithObject(convObj, true);
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error(ex.ToString());
+        }
+    }
     public unsafe void Test()
     {
         //Just a Test function
         try
         {
+            //Run through Vault
+
 
             //var player = ClientState.LocalPlayer;
             //SetPos.SetPosPos(player.Position + new System.Numerics.Vector3(0, 1,
@@ -696,6 +675,8 @@ public class MBT : IDalamudPlugin
             //addon.
             // PluginLog.Information(addon->AtkValues[0].ToString());
             //textTest = addon->AtkValues[0].ToString();
+            //InteractWithObject("Red Coral Formation");
+            PluginLog.Info(ClientState.LocalPlayer.Position.ToString());
         }
         catch (Exception e)
         {
@@ -703,4 +684,14 @@ public class MBT : IDalamudPlugin
             //throw;
         }
     }
+
+    private void Condition_OnConditionChange(ConditionFlag flag, bool value)
+    {
+        PluginLog.Info(flag.ToString());
+        if (flag == ConditionFlag.InCombat)
+            _runner.Enable = false;
+        else
+            _runner.Enable = true;
+    }
+
 }

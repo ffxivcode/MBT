@@ -13,37 +13,39 @@ namespace MBT
 {
     public class DalamudAPI
     {
-        [PluginService] public static DalamudPluginInterface PluginInterface { get; private set; }
+        [PluginService] public static DalamudPluginInterface? PluginInterface { get; private set; }
 
-        [PluginService] public static ICommandManager CommandManager { get; private set; }
+        [PluginService] public static ICommandManager? CommandManager { get; private set; }
 
-        [PluginService] public static IFramework Framework { get; private set; }
+        [PluginService] public static IFramework? Framework { get; private set; }
 
-        [PluginService] public static ISigScanner SigScanner { get; private set; }
+        [PluginService] public static ISigScanner? SigScanner { get; private set; }
 
-        [PluginService] public static IClientState ClientState { get; private set; }
+        [PluginService] public static IClientState? ClientState { get; private set; }
 
-        [PluginService] public static IObjectTable ObjectTable { get; private set; }
+        [PluginService] public static IObjectTable? ObjectTable { get; private set; }
 
-        [PluginService] public static ITargetManager TargetManager { get; private set; }
+        [PluginService] public static ITargetManager? TargetManager { get; private set; }
 
-        [PluginService] public static IGameConfig GameConfig { get; private set; }
+        [PluginService] public static IGameConfig? GameConfig { get; private set; }
 
-        [PluginService] public static IGameGui GameGui { get; private set; }
+        [PluginService] public static IGameGui? GameGui { get; private set; }
 
-        [PluginService] public static IKeyState KeyState { get; private set; }
+        [PluginService] public static IKeyState? KeyState { get; private set; }
 
-        [PluginService] public static IPartyList PartyList { get; private set; }
+        [PluginService] public static IPartyList? PartyList { get; private set; }
 
-        [PluginService] public static IPluginLog PluginLog { get; private set; }
+        [PluginService] public static IPluginLog? PluginLog { get; private set; }
 
         [PluginService] public static IChatGui? ChatGui { get; private set; }
 
         [PluginService] public static IGameInteropProvider? GameInteropProvider { get; private set; }
 
+        [PluginService] public static ICondition? Condition { get; private set; }
+
         public unsafe static bool TryGetAddonByName<T>(string Addon, out T* AddonPtr) where T : unmanaged
         {
-            var a = DalamudAPI.GameGui.GetAddonByName(Addon, 1);
+            var a = GameGui.GetAddonByName(Addon, 1);
             if (a == IntPtr.Zero)
             {
                 AddonPtr = null;

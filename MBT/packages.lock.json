@@ -26,6 +26,12 @@
           "DotRecast.Core": "2024.1.1"
         }
       },
+      "Reloaded.Memory": {
+        "type": "Direct",
+        "requested": "[7.1.0, )",
+        "resolved": "7.1.0",
+        "contentHash": "4Y5tCsRWdW/shj9W7RqJq37LStuW1VVtjxsBp4LKZilPcjudeQg9k+u+6fnDgacCEJiG3S2EtcaiNtVMTdaSnQ=="
+      },
       "TinyIpc": {
         "type": "Direct",
         "requested": "[4.3.0, )",

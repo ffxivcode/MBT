@@ -33,7 +33,6 @@
     <PackageReference Include="DalamudPackager" Version="2.1.12" />
     <PackageReference Include="DotRecast.Detour" Version="2024.1.1" />
     <PackageReference Include="DotRecast.Recast" Version="2024.1.1" />
-    <PackageReference Include="Reloaded.Memory" Version="7.1.0" />
     <PackageReference Include="TinyIpc" Version="4.3.0" />
     <Reference Include="FFXIVClientStructs">
       <HintPath>$(DalamudLibPath)FFXIVClientStructs.dll</HintPath>
