@@ -14,7 +14,6 @@ public class MainWindow : Window, IDisposable
     private readonly MBT Plugin;
     private int currentTab = 1;
     private string dropdownSelected = "";
-    private bool open2ndPop = false;
     string input = "";
     string inputTextName = "";
     int inputIW = 200;
@@ -245,10 +244,10 @@ public class MainWindow : Window, IDisposable
             {
                 Plugin.StopNavigating();
             }
-            if (ImGui.Button("Test"))
+            /*if (ImGui.Button("Test"))
             {
                 Plugin.Test();
-            }
+            }*/
             //
         }
     }

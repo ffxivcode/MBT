@@ -20,7 +20,6 @@ using System.Threading.Tasks;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using ClickLib.Clicks;
 using Dalamud.Game.ClientState.Objects.Types;
-using static Lumina.Data.Parsing.Layer.LayerCommon;
 namespace MBT;
 
 /// <summary>
