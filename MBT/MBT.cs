@@ -20,6 +20,7 @@ using System.Threading.Tasks;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using ClickLib.Clicks;
 using Dalamud.Game.ClientState.Objects.Types;
+using Dalamud.Plugin.Services;
 namespace MBT;
 
 /// <summary>
@@ -28,6 +29,18 @@ namespace MBT;
 
 public class MBT : IDalamudPlugin
 {
+    public string textFollow1 = "";
+    public Vector4 textFollow1Color = new(255f, 0f, 0f, 1f);
+    public string textFollow2 = "";
+    public Vector4 textFollow2Color = new(255f, 0f, 0f, 1f);
+    public string textFollow3 = "";
+    public Vector4 textFollow3Color = new(255f, 0f, 0f, 1f);
+    public bool follow = false;
+    public bool following = false;
+    private bool spreading = false;
+    public int followDistance = 1;
+    public string followTarget = "";
+    public GameObject? followTargetObject = null;
     public bool stopNavigating = false;
     public string teleportPOS = "";
     public string speedBase = "";
@@ -48,6 +61,7 @@ public class MBT : IDalamudPlugin
     TinyMessageBus messagebus3 = new("DalamudBroadcasterSpread");
 
     XIVRunner.XIVRunner _runner;
+    XIVRunner.XIVRunner _runnerFollow;
     XIVRunner.XIVRunner _runnerIC;
     public MBT(
         DalamudPluginInterface pluginInterface)
@@ -56,11 +70,18 @@ public class MBT : IDalamudPlugin
         {
             Plugin = this;
             Initialize(pluginInterface);
+            _runnerFollow = XIVRunner.XIVRunner.Create(pluginInterface);
+            _runnerFollow.Enable = true;
+            _runnerFollow.Precision = followDistance + .1f;
+            _runnerFollow.UseMount = false;
+            _runnerFollow.TryJump = false;
+            
             _runner = XIVRunner.XIVRunner.Create(pluginInterface);
             _runner.Enable = true;
             _runner.Precision = .1f;
             _runner.UseMount = false;
             _runner.TryJump = false;
+
             _runnerIC = XIVRunner.XIVRunner.Create(pluginInterface);
             _runnerIC.Enable = true;
             _runnerIC.Precision = .1f;
@@ -79,9 +100,13 @@ public class MBT : IDalamudPlugin
             CommandManager.AddHandler("/mbt", new CommandInfo(OnCommand)
             {
                 HelpMessage = "/mbt -> opens main window\n" +
+                "/mbt cometome or ctm Player Name -> Immediately ends all movement and move's straight to Player\n" +
+                "/mbt follow on/off or fon/foff -> turns follow on or off\n" +
+                "/mbt followtarget or ft Player Name -> sets follow target to Player Name\n" +
+                "/mbt followdistance or fd # -> sets Follow distance to # (must be int)\n" +
                 "/mbt spread -> Spreads toons away from LocalPlayer\n" +
-                "/mbt exitduty -> Immediately exits the duty\n" +
-                "/mbt acceptduty -> Immediately accepts the duty finder popup\n"
+                "/mbt exitduty or ed -> Immediately exits the duty\n" +
+                "/mbt acceptduty or ad -> Immediately accepts the duty finder popup\n"
             });
 
             //Draw UI
@@ -89,7 +114,7 @@ public class MBT : IDalamudPlugin
             PluginInterface.UiBuilder.OpenMainUi += OpenMainUI;
             ChatCommand.Initialize();
             //Attach our OnGameFrameworkUpdate function to our game's Framework Update (called once every frame)
-            //Framework.Update += OnGameFrameworkUpdate;
+            Framework.Update += OnGameFrameworkUpdate;
             //Condition.ConditionChange += Condition_OnConditionChange;
             //messagebus1.MessageReceived +=
             //(sender, e) => MessageReceived(Encoding.UTF8.GetString((byte[])e.Message));
@@ -220,6 +245,8 @@ public class MBT : IDalamudPlugin
     {
         PluginLog.Info("MessageRecieved: " + message);
         if (ClientState.LocalPlayer == null) return;
+        follow = false;
+        spreading = true;
         var messageList = message.Split(',').ToList();
         var playerObjectId = ClientState.LocalPlayer.ObjectId;
         PluginLog.Info("messageList.Count: " + messageList.Count + " messageList[0]: " + messageList[0] + " messageList[1]: " + messageList[1] + " messageList[2]: " + messageList[2]);
@@ -245,19 +272,159 @@ public class MBT : IDalamudPlugin
             }
         }
     }
+    public void SetTarget()
+    {
+        //If PlayerCharacter's target is not null, Set our followTarget InputText to our Target Object's .Name field
+        if (TargetManager.Target != null)
+        {
+            followTarget = TargetManager.Target.Name.ToString();
+        }
+    }
+    public void SetFollowStatus(bool sts, string name, string distance, Vector4 color)
+    {
+        //Set UI TextColored's Values
+        string? FollowingSTS;
+        if (sts)
+            FollowingSTS = "On";
+        else
+            FollowingSTS = "Off";
+        textFollow1 = " " + FollowingSTS;
+        textFollow2 = "Name: " + name;
+        textFollow3 = "Distance: " + distance + " <= " + followDistance;
+        textFollow1Color = color;
+        textFollow2Color = color;
+        textFollow3Color = color;
+    }
+    private GameObject GetGameObjectFromName(string _objectName)
+    {
+        var obj = ObjectTable;
+        if (obj == null) return null;
+
+        var objs = obj.Where(s => s.Name.ToString() == _objectName);
+
+        if (!objs.Any())
+            return null;
+        else
+            return objs.First();
+    }
+    public bool GetFollowTargetObject()
+    {
+        var ftarget = GetGameObjectFromName(followTarget);
+        if (ftarget == null)
+        {
+            followTargetObject = null;
+            SetFollowStatus(false, followTarget + " not found", "0", new(255f, 0f, 0f, 1f));
+            if (following)
+                _runner.NaviPts.Clear();
+            return false;
+        }
+        else
+        {
+            followTargetObject = ftarget;
+            return true;
+        }
+    }
+
+    public void OnGameFrameworkUpdate(IFramework framework)
+    {
+        //If follow is not enabled clear TextColored's and return
+        if (!follow)
+        {
+            SetFollowStatus(false, "", "", new(255f, 0f, 0f, 1f));
+            if (_runnerFollow.MovingValid && !spreading)
+                _runnerFollow.NaviPts.Clear();
+            return;
+        }
+
+        //If LocalPlayer object is null return (we are not logged in or between zones etc..)
+        if (ClientState.LocalPlayer == null) return;
+
+        //If followTarget is not empty GetFollowTargetObject then set our player variable and calculate the distance
+        //between player and followTargetObject and if distance > followDistance move to the followTargetObject
+        if (!string.IsNullOrEmpty(followTarget))
+        {
+            try
+            {
+                /// Need to figure out how to handle this
+                /// because if the Object leaves the zone it
+                /// sorta leaves a ghost GO that is still .IsValid
+                /// and all its data is locked to where it was
+                /// when it left the zone, this current way is
+                /// gross and very inefficient
+
+                if (!GetFollowTargetObject())
+                    return;
+                if (followTargetObject == null) return;
+
+                var player = ClientState.LocalPlayer;
+
+                //if (targetFollowTargetsTargets)
+                //{
+                //    if (player.TargetObjectId != followTargetObject.TargetObjectId && followTargetObject.TargetObjectId != 0)
+                //    {
+                //        PluginLog.Info("1");
+                //        TargetManager.Target = followTargetObject.TargetObject;
+                //        PluginLog.Info("Follow:" + followTargetObject.TargetObject.Name);
+
+                //    }
+                //}
+                if (!follow)
+                {
+                    SetFollowStatus(false, "", "", new(255f, 0f, 0f, 1f));
+                    if (_runnerFollow.MovingValid && !spreading)
+                        _runnerFollow.NaviPts.Clear();
+                    return;
+                }
+                var distance = Convert.ToInt32(Vector3.Distance(new Vector3(player.Position.X, player.Position.Y, player.Position.Z), new Vector3(followTargetObject.Position.X, followTargetObject.Position.Y, followTargetObject.Position.Z)));
+
+                SetFollowStatus(true, followTargetObject.Name.ToString(), distance.ToString(), new(0f, 255f, 0f, 1f));
+
+                if ((distance > (followDistance + .1f)) && distance < 100)
+                {
+                    following = true;
+                    //Move.Move.MoveTo(true, followTargetObject.Position, followDistance);
+                    _runnerFollow.Precision = followDistance + .1f;
+                    _runner.NaviPts.Clear();
+                    _runnerFollow.NaviPts.Enqueue(followTargetObject.Position);
+                }
+                else if (following)
+                {
+                    following = false;
+                    //Move.Move.MoveTo(false);
+                    _runnerFollow.NaviPts.Clear();
+                }
+            }
+            catch (Exception e)
+            {
+                PluginLog.Error(e.ToString());
+                SetFollowStatus(false, "", "", new(255f, 0f, 0f, 1f));
+                if (following)
+                    _runnerFollow.NaviPts.Clear();
+                //throw;
+            }
+        }
+        else
+        {
+            SetFollowStatus(false, "No follow target set", "", new(255f, 0f, 0f, 1f));
+            if (following)
+                _runnerFollow.NaviPts.Clear();
+        }
+    }
     public void Dispose()
     {
         //RemoveAllWindows and Dispose of them, Disable FrameworkUpdate and remove Commands and change back to Legacy if needed
         WindowSystem.RemoveAllWindows();
         ((IDisposable)MainWindow).Dispose();
-        //Framework.Update -= OnGameFrameworkUpdate;
+        Framework.Update -= OnGameFrameworkUpdate;
         //Condition.ConditionChange -= Condition_OnConditionChange;
         CommandManager.RemoveHandler("/mbt"); 
         CommandManager.RemoveHandler("/bc");
+        _runnerFollow.NaviPts.Clear();
         _runner.NaviPts.Clear();
         _runnerIC.NaviPts.Clear();
         messagebus1.Dispose();
         messagebus2.Dispose();
+        _runnerFollow?.Dispose();
         _runner?.Dispose();
         _runnerIC?.Dispose();
     }
@@ -268,18 +435,67 @@ public class MBT : IDalamudPlugin
     private void OnCommand(string command, string args)
     {
         //In response to the slash command, just display our main ui or turn Follow on or off
- 
-        if (args.ToUpper().Contains("SPREAD"))
+
+        if (args.ToUpper().Contains("FOLLOW ON") || args.ToUpper().Contains("FON"))
+        {
+            follow = true;
+            spreading = false;
+            _runnerFollow.NaviPts.Clear();
+        }
+        else if (args.ToUpper().Contains("FOLLOW OFF") || args.ToUpper().Contains("FOFF"))
+        {
+            follow = false;
+            following = false;
+            _runnerFollow.NaviPts.Clear();
+        }
+        else if (args.ToUpper().Contains("COMETOME "))
+        {
+            var go = GetGameObjectFromName(args[9..]);
+            if (go != null)
+            {
+                StopAllMovement();
+                _runner.Precision = 0.1f;
+                _runner.NaviPts.Enqueue(go.Position);
+            }
+        }
+        else if (args.ToUpper().Contains("CTM "))
+        {
+            var go = GetGameObjectFromName(args[4..]);
+            if (go != null)
+            {
+                StopAllMovement();
+                _runner.Precision = 0.1f;
+                _runner.NaviPts.Enqueue(go.Position);
+            }
+        }
+        else if (args.ToUpper().Contains("FOLLOWTARGET "))
+        {
+            followTarget = args[13..];
+        }
+        else if (args.ToUpper().Contains("FT "))
+        {
+            followTarget = args[3..];
+        }
+        else if (args.ToUpper().Contains("FOLLOWDISTANCE "))
+        {
+            followDistance = Convert.ToInt32(args[15..]);
+        }
+        else if (args.ToUpper().Contains("FD "))
+        {
+            followDistance = Convert.ToInt32(args[3..]);
+        }
+        else if (args.ToUpper().Contains("SPREAD"))
         {
             _runner.NaviPts.Clear();
             Spread();
         }
-        else if (args.ToUpper().Contains("ACCEPTDUTY"))
+        else if (args.ToUpper().Contains("ACCEPTDUTY") || args.ToUpper().Contains("AD"))
         {
             AcceptDuty();
         }
-        else if (args.ToUpper().Contains("EXITDUTY"))
+        else if (args.ToUpper().Contains("EXITDUTY") || args.ToUpper().Contains("ED"))
         {
+            //maybe make this have to be pressed / called / invoked twice to prevent accidental exiting
             this.exitDuty.Invoke((char)0);
         }
         else if (MainWindow.IsOpen)
@@ -316,6 +532,16 @@ public class MBT : IDalamudPlugin
     {
         //Draw Window
         this.WindowSystem.Draw();
+    }
+    private void StopAllMovement()
+    {
+        follow = false;
+        following = false;
+        stopNavigating = true;
+        spreading = false;
+        _runnerFollow.NaviPts.Clear();
+        _runnerIC.NaviPts.Clear();
+        _runner.NaviPts.Clear();
     }
     public unsafe void teleportX(int amount)
     {
@@ -407,7 +633,6 @@ public class MBT : IDalamudPlugin
         }
         catch (Exception e)
         {
-            PluginLog.Error(e.ToString());
             PluginLog.Error(e.ToString());
             //throw;
         }

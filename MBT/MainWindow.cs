@@ -60,8 +60,26 @@ public class MainWindow : Window, IDisposable
         if (ImGui.Button("Build Path")) currentTab = 2;
         ImGui.SameLine(0, 5);
         if (ImGui.Button("Movement Hacks")) currentTab = 3;
+        ImGui.SameLine(0, 5);
+        if (ImGui.Button("Follow")) currentTab = 4;
         ImGui.Separator();
-        if (currentTab == 3)
+        if (currentTab == 4)
+        {
+            ImGui.Text("Follow:");
+            ImGui.SameLine(0, 5);
+            ImGui.TextColored(Plugin.textFollow1Color, Plugin.textFollow1);
+            ImGui.SameLine(0, 5);
+            ImGui.TextColored(Plugin.textFollow2Color, Plugin.textFollow2);
+            ImGui.SameLine(0, 5);
+            ImGui.TextColored(Plugin.textFollow3Color, Plugin.textFollow3);
+            ImGui.Checkbox("Follow Enabed", ref Plugin.follow);
+            ImGui.InputInt("Follow Distance", ref Plugin.followDistance);
+            ImGui.InputTextWithHint("##FollowTarget", "Follow Target", ref Plugin.followTarget, 20);
+            ImGui.SameLine(0, 5);
+            if (ImGui.Button("Add Current Target"))
+                Plugin.SetTarget();
+        }
+        else if (currentTab == 3)
         {
             ImGui.Text("Teleport (Use at Own Risk):");
             if (ImGui.Button("+X"))
