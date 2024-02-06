@@ -854,6 +854,7 @@ public class MBT : IDalamudPlugin
                 }
                 if (boss)
                 {
+                    await Task.Delay(5000);
                     ChatCommand.ExecuteCommand("/vbm aioff");
                     //switch our class type
                     switch (ClientState.LocalPlayer.ClassJob.GameData.Role)
@@ -872,7 +873,7 @@ public class MBT : IDalamudPlugin
                     followTarget = followTargetObject.Name.ToString();
                     follow = true;
                     followDistance = 0;
-                    await Task.Delay(5000);
+                    
                     while (Condition[ConditionFlag.InCombat])
                     {
                         await Task.Delay(5);
