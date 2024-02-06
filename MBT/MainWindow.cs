@@ -26,7 +26,8 @@ public class MainWindow : Window, IDisposable
             "Boss|move to leash location and hit",
             "Interactable|interact with?",
             "SelectYesno|yes or no?",
-            "MoveToObject|Object Name?"
+            "MoveToObject|Object Name?",
+            "ExitDuty|*NoAddUI*"
         };
     public MainWindow(MBT plugin) : base(
         "Multi Boxer Toolkit: /mbt", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoResize)
@@ -153,18 +154,24 @@ public class MainWindow : Window, IDisposable
                     if (ImGui.Selectable(item.Split('|')[0]))
                     {
                         dropdownSelected = item;
-                        showAddActionUI = true;
-                        if (item.Split('|')[0].Equals("Boss"))
+                        
+                        if (item.Split('|')[1].Equals("*NoAddUI*")) 
+                        {
+                            Plugin.ListBoxPOSText.Add(item.Split('|')[0]);
+                        }
+                        else if (item.Split('|')[0].Equals("Boss"))
                         {
                             ddisboss = true;
                             input = ClientState.LocalPlayer.Position.ToString().Replace('<', ' ').Replace('>', ' ').Trim();
                             inputIW = 400;
+                            showAddActionUI = true;
                         }
                         else
                         {
                             ddisboss = false;
                             inputIW = 400;
                             input = "";
+                            showAddActionUI = true;
                         }
                         inputTextName = item.Split('|')[1];
                     }

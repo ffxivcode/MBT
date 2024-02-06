@@ -35,6 +35,8 @@ namespace MBT
 
         [PluginService] public static IPartyList? PartyList { get; private set; }
 
+        [PluginService] public static IBuddyList? BuddyList { get; private set; }
+
         [PluginService] public static IPluginLog? PluginLog { get; private set; }
 
         [PluginService] public static IChatGui? ChatGui { get; private set; }

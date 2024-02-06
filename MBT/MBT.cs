@@ -21,6 +21,7 @@ using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using ClickLib.Clicks;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
+using Microsoft.VisualBasic;
 namespace MBT;
 
 /// <summary>
@@ -703,6 +704,7 @@ public class MBT : IDalamudPlugin
                 var targetPos = new RcVec3f();
                 var stopForCombat = true;
                 var targetPosSet = false;
+                var boss = false;
                 if (item.Split('|')[0].Equals("Wait"))
                 {
                     if (item.Split('|')[1].Equals(""))
@@ -802,6 +804,7 @@ public class MBT : IDalamudPlugin
                 {
                     stopForCombat = false;
                     targetPosSet = true;
+                    boss = true;
                     if (item.Split('|')[1].Equals(""))
                         targetPos = new RcVec3f(ClientState.LocalPlayer.Position.X, ClientState.LocalPlayer.Position.Y, ClientState.LocalPlayer.Position.Z);
                     else
@@ -815,7 +818,12 @@ public class MBT : IDalamudPlugin
                     targetPosSet = true;
                     targetPos = new RcVec3f(objs.First().Position.X, objs.First().Position.Y, objs.First().Position.Z);
                 }
-                
+                else if (item.Split('|')[0].Equals("ExitDuty"))
+                {
+                    this.exitDuty.Invoke((char)0);
+                    continue;
+                }
+
                 var playerPos = new RcVec3f(ClientState.LocalPlayer.Position.X, ClientState.LocalPlayer.Position.Y, ClientState.LocalPlayer.Position.Z);
                 if (!targetPosSet)
                     targetPos = new RcVec3f(float.Parse(item.Split(',')[0]), float.Parse(item.Split(',')[1]), float.Parse(item.Split(',')[2]));
@@ -844,12 +852,54 @@ public class MBT : IDalamudPlugin
                     }
                     await Task.Delay(5);
                 }
+                if (boss)
+                {
+                    ChatCommand.ExecuteCommand("/vbm aioff");
+                    //switch our class type
+                    switch (ClientState.LocalPlayer.ClassJob.GameData.Role)
+                    {
+                        //tank - follow healer
+                        case 1:
+                            //get our healer object
+                            followTargetObject = GetTrustHealerMemberObject();
+                            break;
+                        //everyone else - follow tank
+                        default:
+                            //get our tank object
+                            followTargetObject = GetTrustTankMemberObject();
+                            break;
+                    }
+                    followTarget = followTargetObject.Name.ToString();
+                    follow = true;
+                    followDistance = 0;
+                    await Task.Delay(5000);
+                    while (Condition[ConditionFlag.InCombat])
+                    {
+                        await Task.Delay(5);
+                    }
+                    follow = false;
+                    boss = false;
+                    ChatCommand.ExecuteCommand("/vbm aion");
+                    ChatCommand.ExecuteCommand("/vbm floff");
+                }
             }
         }
         catch (Exception ex)
         {
             PluginLog.Error(ex.ToString());
         }
+    }
+    private GameObject GetGroupMemberObjectByRole(int role)
+    {
+        return PartyList.Where(s => s.ClassJob.GameData.Role == role).First().GameObject;
+    }
+    private GameObject GetTrustTankMemberObject()
+    {
+        return BuddyList.Where(s => s.GameObject.Name.ToString().Contains("Marauder") || s.GameObject.Name.ToString().Contains("") || s.GameObject.Name.ToString().Contains("Ysayle") || s.GameObject.Name.ToString().Contains("Temple Knight") || s.GameObject.Name.ToString().Contains("Haurchefant") || s.GameObject.Name.ToString().Contains("Pero Roggo") || s.GameObject.Name.ToString().Contains("Aymeric") || s.GameObject.Name.ToString().Contains("House Fortemps Knight") || s.GameObject.Name.ToString().Contains("Carvallain") || s.GameObject.Name.ToString().Contains("Gosetsu") || s.GameObject.Name.ToString().Contains("Hien") || s.GameObject.Name.ToString().Contains("Resistance Fighter") || s.GameObject.Name.ToString().Contains("Arenvald") || s.GameObject.Name.ToString().Contains("Emet-Selch") || s.GameObject.Name.ToString().Contains("Venat") || s.GameObject.Name.ToString().Contains("Varshahn") || s.GameObject.Name.ToString().Contains("Thancred") || s.GameObject.Name.ToString().Contains("G'raha Tia") || s.GameObject.Name.ToString().Contains("Crystal Exarch")).First().GameObject;
+    }
+    private GameObject GetTrustHealerMemberObject()
+    {
+        return BuddyList.Where(s => s.GameObject.Name.ToString().Contains("Conjurer") || s.GameObject.Name.ToString().Contains("Temple Chirurgeon") || s.GameObject.Name.ToString().Contains("Mol Youth") || s.GameObject.Name.ToString().Contains("Doman Shaman") || s.GameObject.Name.ToString().Contains("Venat") || s.GameObject.Name.ToString().Contains("Alphinaud") || s.GameObject.Name.ToString().Contains("Urianger") || s.GameObject.Name.ToString().Contains("Y'shtola") || s.GameObject.Name.ToString().Contains("Crystal Exarch") || s.GameObject.Name.ToString().Contains("G'raha Tia") ).First().GameObject;
     }
     public unsafe void InteractWithObject(GameObject baseObj)
     {
@@ -900,7 +950,14 @@ public class MBT : IDalamudPlugin
             // PluginLog.Information(addon->AtkValues[0].ToString());
             //textTest = addon->AtkValues[0].ToString();
             //InteractWithObject("Red Coral Formation");
-            PluginLog.Info(ClientState.LocalPlayer.Position.ToString());
+            //var go = GetGroupMemberObjectByRole(4);
+            //PluginLog.Info("Our Healer is: " + go.Name.ToString());
+            //go = GetGroupMemberObjectByRole(1);
+            //PluginLog.Info("Our Tank is: " + go.Name.ToString());
+            var healer = GetTrustHealerMemberObject();
+            var tank = GetTrustTankMemberObject();
+            PluginLog.Info("Tank: " + tank.Name);
+            PluginLog.Info("Healer: " + healer.Name);
         }
         catch (Exception e)
         {
