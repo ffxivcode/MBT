@@ -1,49 +1,95 @@
 ﻿global using Dalamud;
 using Dalamud.Game;
 using Dalamud.Game.ClientState.Objects;
+using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.ClientState.Objects.Types;
+using Dalamud.Game.ClientState.Statuses;
 using Dalamud.IoC;
 using Dalamud.Memory;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using Lumina.Excel;
+using Lumina.Excel.GeneratedSheets;
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
 
 namespace MBT
 {
     public class DalamudAPI
     {
-        [PluginService] public static DalamudPluginInterface? PluginInterface { get; private set; }
+        [PluginService] public static DalamudPluginInterface PluginInterface { get; private set; }
 
-        [PluginService] public static ICommandManager? CommandManager { get; private set; }
+        [PluginService] public static ICommandManager CommandManager { get; private set; }
 
-        [PluginService] public static IFramework? Framework { get; private set; }
+        [PluginService] public static IFramework Framework { get; private set; }
 
-        [PluginService] public static ISigScanner? SigScanner { get; private set; }
+        [PluginService] public static ISigScanner SigScanner { get; private set; }
 
-        [PluginService] public static IClientState? ClientState { get; private set; }
+        [PluginService] public static IClientState ClientState { get; private set; }
 
-        [PluginService] public static IObjectTable? ObjectTable { get; private set; }
+        [PluginService] public static IObjectTable ObjectTable { get; private set; }
 
-        [PluginService] public static ITargetManager? TargetManager { get; private set; }
+        [PluginService] public static ITargetManager TargetManager { get; private set; }
 
-        [PluginService] public static IGameConfig? GameConfig { get; private set; }
+        [PluginService] public static IGameConfig GameConfig { get; private set; }
 
-        [PluginService] public static IGameGui? GameGui { get; private set; }
+        [PluginService] public static IGameGui GameGui { get; private set; }
 
-        [PluginService] public static IKeyState? KeyState { get; private set; }
+        [PluginService] public static IKeyState KeyState { get; private set; }
 
-        [PluginService] public static IPartyList? PartyList { get; private set; }
+        [PluginService] public static IPartyList PartyList { get; private set; }
 
-        [PluginService] public static IBuddyList? BuddyList { get; private set; }
+        [PluginService] public static IBuddyList BuddyList { get; private set; }
 
-        [PluginService] public static IPluginLog? PluginLog { get; private set; }
+        [PluginService] public static IPluginLog PluginLog { get; private set; }
 
-        [PluginService] public static IChatGui? ChatGui { get; private set; }
+        [PluginService] public static IChatGui ChatGui { get; private set; }
 
-        [PluginService] public static IGameInteropProvider? GameInteropProvider { get; private set; }
+        [PluginService] public static IGameInteropProvider GameInteropProvider { get; private set; }
 
-        [PluginService] public static ICondition? Condition { get; private set; }
+        [PluginService] public static ICondition Condition { get; private set; }
+
+        [PluginService] public static IDataManager DataManager { get; private set; }
+
+        public static IEnumerable<T> GetObjectInRadius<T>(IEnumerable<T> objects, float radius) where T : GameObject
+        => objects.Where(o => DistanceToPlayer(o) <= radius);
+
+        public static ExcelSheet<T> GetSheet<T>() where T : ExcelRow => DataManager.GetExcelSheet<T>();
+
+        public static float DistanceToPlayer(GameObject obj)
+        {
+            if (obj == null) return float.MaxValue;
+            var player = Player.Object;
+            if (player == null) return float.MaxValue;
+
+            var distance = Vector3.Distance(player.Position, obj.Position) - player.HitboxRadius;
+            distance -= obj.HitboxRadius;
+            return distance;
+        }
+        public unsafe static class Player
+        {
+            public static PlayerCharacter Object => ClientState.LocalPlayer;
+            public static bool Available => ClientState.LocalPlayer != null;
+            public static bool Interactable => Available && Object.IsTargetable;
+            public static ulong CID => ClientState.LocalContentId;
+            public static StatusList Status => ClientState.LocalPlayer.StatusList;
+            public static string Name => ClientState.LocalPlayer?.Name.ToString();
+            public static int Level => ClientState.LocalPlayer?.Level ?? 0;
+            public static bool IsInHomeWorld => ClientState.LocalPlayer.HomeWorld.Id == ClientState.LocalPlayer.CurrentWorld.Id;
+            public static string HomeWorld => ClientState.LocalPlayer?.HomeWorld.GameData.Name.ToString();
+            public static string CurrentWorld => ClientState.LocalPlayer?.CurrentWorld.GameData.Name.ToString();
+            public static Character* Character => (Character*)ClientState.LocalPlayer.Address;
+            public static BattleChara* BattleChara => (BattleChara*)ClientState.LocalPlayer.Address;
+            public static GameObject* GameObject => (GameObject*)ClientState.LocalPlayer.Address;
+        }
+        public static BNpcBase GetObjectNPC(GameObject obj)
+        {
+            if (obj == null) return null;
+            return GetSheet<BNpcBase>().GetRow(obj.DataId);
+        }
 
         public unsafe static bool TryGetAddonByName<T>(string Addon, out T* AddonPtr) where T : unmanaged
         {

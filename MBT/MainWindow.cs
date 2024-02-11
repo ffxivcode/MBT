@@ -27,8 +27,11 @@ public class MainWindow : Window, IDisposable
             "Interactable|interact with?",
             "SelectYesno|yes or no?",
             "MoveToObject|Object Name?",
-            "ExitDuty|*NoAddUI*"
+            "ExitDuty|*NoAddUI*",
+            "TreasureCoffer|*NoAddUI*",
+            "DutySpecificCode|step #?"
         };
+
     public MainWindow(MBT plugin) : base(
         "Multi Boxer Toolkit: /mbt", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoResize)
     {
@@ -188,12 +191,12 @@ public class MainWindow : Window, IDisposable
             {
                 try
                 {
-                    if (File.Exists(ClientState.TerritoryType.ToString() + ".json"))
+                    if (File.Exists(Plugin.pathsDirectory + "/" + ClientState.TerritoryType.ToString() + ".json"))
                     {
-                        File.Delete(ClientState.TerritoryType.ToString() + ".json");
+                        File.Delete(Plugin.pathsDirectory + "/" + ClientState.TerritoryType.ToString() + ".json");
                     }
                     string json = JsonSerializer.Serialize(Plugin.ListBoxPOSText);
-                    File.WriteAllText(ClientState.TerritoryType.ToString() + ".json", json);
+                    File.WriteAllText(Plugin.pathsDirectory + "/" + ClientState.TerritoryType.ToString() + ".json", json);
                 }
                 catch (Exception e)
                 {
@@ -206,10 +209,10 @@ public class MainWindow : Window, IDisposable
             {
                 try
                 {
-                    if (File.Exists(ClientState.TerritoryType.ToString() + ".json"))
+                    if (File.Exists(Plugin.pathsDirectory + "/" + ClientState.TerritoryType.ToString() + ".json"))
                     {
                         Plugin.ListBoxPOSText.Clear();
-                        string json = File.ReadAllText(ClientState.TerritoryType.ToString() + ".json");
+                        string json = File.ReadAllText(Plugin.pathsDirectory + "/" + ClientState.TerritoryType.ToString() + ".json");
                         Plugin.ListBoxPOSText = JsonSerializer.Deserialize<List<string>>(json);
                     }
                 }
@@ -260,6 +263,9 @@ public class MainWindow : Window, IDisposable
         {
             ImGui.Text("Main:");
             ImGui.Spacing();
+            ImGui.Text("Current Territory: " + ClientState.TerritoryType);
+            ImGui.Text("Mesh Exists: " + File.Exists(Plugin.meshesDirectory + "/" + ClientState.TerritoryType.ToString() + ".navmesh"));
+            ImGui.Text("Path Exists: " + File.Exists(Plugin.pathsDirectory + "/" + ClientState.TerritoryType.ToString() + ".json"));
             if (ImGui.Button("Navigate Path"))
             {
                 Plugin.NavigatePath();
@@ -269,11 +275,11 @@ public class MainWindow : Window, IDisposable
             {
                 Plugin.StopNavigating();
             }
-            /*if (ImGui.Button("Test"))
+            if (ImGui.Button("Test"))
             {
                 Plugin.Test();
-            }*/
-            //
+            }
+            //*/
         }
     }
 }

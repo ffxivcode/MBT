@@ -10,20 +10,20 @@
       },
       "DotRecast.Detour": {
         "type": "Direct",
-        "requested": "[2024.1.1, )",
-        "resolved": "2024.1.1",
-        "contentHash": "G2xt00AwTcQO8gmsATfRB88T46/mqEEWy0uTFB+khoh1nV4wwL+UbK/3pJK6v7We1ABOp8igTyBcpghdIQf2Og==",
+        "requested": "[2024.1.2, )",
+        "resolved": "2024.1.2",
+        "contentHash": "h2HxSZDxLutkz+Q9r4o2L6fPHVo9UVMCSOWkZYFZXSIbmY7z8eivETKRfxKfFCt5V6TI2fmhJ26TgODF3SMniA==",
         "dependencies": {
-          "DotRecast.Core": "2024.1.1"
+          "DotRecast.Core": "2024.1.2"
         }
       },
       "DotRecast.Recast": {
         "type": "Direct",
-        "requested": "[2024.1.1, )",
-        "resolved": "2024.1.1",
-        "contentHash": "U1xsG8uYZiSooRyD9mNDGLyy+6yD35EiMdyWu/J9YH6vS1hBq3V5EVbqg/VUD+WSrjLIQKQticL0F2VLZSnXkQ==",
+        "requested": "[2024.1.2, )",
+        "resolved": "2024.1.2",
+        "contentHash": "sqUrwHps7lguzn0QEnDCOsQGXqsnGGo36me4OMOgkJC8s4tvLmRtx0Enz6kyf7yb9IXC5cW/F4ZRbREG5QsO/A==",
         "dependencies": {
-          "DotRecast.Core": "2024.1.1"
+          "DotRecast.Core": "2024.1.2"
         }
       },
       "Reloaded.Memory": {
@@ -47,8 +47,8 @@
       },
       "DotRecast.Core": {
         "type": "Transitive",
-        "resolved": "2024.1.1",
-        "contentHash": "NOyy8XQKKAQ0JP/gCBO6RNyWQ5SJCawdCG4rxdkJ00UdJ4QA9Vx1QsbcZ348qwi95MW5jAly1GqRbb1JydHOJg=="
+        "resolved": "2024.1.2",
+        "contentHash": "KAwSxaoC/01DceO+VVvfgn9NU5vg0/kmp8DKk8kUGnz7tkcTmIzV/7Qib361pnKIFDaOwHYzN7FGefBtnpO8nQ=="
       },
       "MessagePack": {
         "type": "Transitive",

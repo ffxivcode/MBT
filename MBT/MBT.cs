@@ -21,7 +21,7 @@ using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using ClickLib.Clicks;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
-using Microsoft.VisualBasic;
+
 namespace MBT;
 
 /// <summary>
@@ -49,7 +49,8 @@ public class MBT : IDalamudPlugin
     public List<string> ListBoxPOSText { get; set; } = new List<string>();
     private delegate void ExitDutyDelegate(char timeout);
     private ExitDutyDelegate exitDuty;
-
+    private GameObject GlobalGameObjectStore;
+    private string GlobalStringStore;
     public string Name => "MBT";
     public static MBT Plugin { get; private set; }
     //public Configuration Configuration { get; init; }
@@ -64,13 +65,30 @@ public class MBT : IDalamudPlugin
     XIVRunner.XIVRunner _runner;
     XIVRunner.XIVRunner _runnerFollow;
     XIVRunner.XIVRunner _runnerIC;
+
+    public DirectoryInfo configDirectory;
+    public DirectoryInfo meshesDirectory; 
+    public DirectoryInfo pathsDirectory;
+
     public MBT(
         DalamudPluginInterface pluginInterface)
     {
         try
         {
-            Plugin = this;
             Initialize(pluginInterface);
+            Plugin = this;
+
+            configDirectory = pluginInterface.ConfigDirectory;
+            meshesDirectory = new DirectoryInfo(configDirectory.FullName.Replace(Plugin.Name, "") + "\\Meshes");
+            pathsDirectory = new DirectoryInfo(configDirectory.FullName + "/paths");
+
+            if (!configDirectory.Exists)
+                configDirectory.Create();
+            if (!meshesDirectory.Exists)
+                meshesDirectory.Create();
+            if(!pathsDirectory.Exists)
+                pathsDirectory.Create();
+            
             _runnerFollow = XIVRunner.XIVRunner.Create(pluginInterface);
             _runnerFollow.Enable = true;
             _runnerFollow.Precision = followDistance + .1f;
@@ -88,6 +106,7 @@ public class MBT : IDalamudPlugin
             _runnerIC.Precision = .1f;
             _runnerIC.UseMount = false;
             _runnerIC.TryJump = false;
+
             //Create MainWindow UI
             MainWindow = new MainWindow(this);
             WindowSystem.AddWindow(MainWindow);
@@ -114,9 +133,12 @@ public class MBT : IDalamudPlugin
             PluginInterface.UiBuilder.Draw += DrawUI;
             PluginInterface.UiBuilder.OpenMainUi += OpenMainUI;
             ChatCommand.Initialize();
+
             //Attach our OnGameFrameworkUpdate function to our game's Framework Update (called once every frame)
             Framework.Update += OnGameFrameworkUpdate;
+
             //Condition.ConditionChange += Condition_OnConditionChange;
+
             //messagebus1.MessageReceived +=
             //(sender, e) => MessageReceived(Encoding.UTF8.GetString((byte[])e.Message));
             messagebus2.MessageReceived +=
@@ -648,18 +670,19 @@ public class MBT : IDalamudPlugin
         //Navigate
         try
         {
-            string path = ClientState.TerritoryType.ToString() + ".navmesh";
-            FileStream fileStream = File.Open(path, FileMode.Open);
+            var path = meshesDirectory + "/" + ClientState.TerritoryType.ToString() + ".navmesh";
+            var fileStream = File.Open(path, FileMode.Open);
             var list = new List<DtStraightPath>();
             var nmd = new NavMeshDetour();
             list = nmd.QueryPath(_startPos, _endPos, fileStream);
-            PluginLog.Info(list.Count.ToString());
+
+            //PluginLog.Info(list.Count.ToString());
             _runner.Enable = false;
             if (list.Count > 2) 
             {
                 foreach (var item in list)
                 {
-                    PluginLog.Info(item.pos.ToString());
+                    //PluginLog.Info(item.pos.ToString());
                     var v3 = new Vector3(item.pos.X, item.pos.Y, item.pos.Z);
                     _runner.NaviPts.Enqueue(v3);
                 }
@@ -691,9 +714,10 @@ public class MBT : IDalamudPlugin
     {
         try
         {
-            if (!File.Exists(ClientState.TerritoryType.ToString() + ".json")) return;
-            string json = File.ReadAllText(ClientState.TerritoryType.ToString() + ".json");
+            if (!File.Exists(pathsDirectory + "/" + ClientState.TerritoryType.ToString() + ".json")) return;
+            string json = File.ReadAllText(pathsDirectory + "/" + ClientState.TerritoryType.ToString() + ".json");
             var path = JsonSerializer.Deserialize<List<string>>(json);
+            //determine where to start depending on how many bosses are killed
             foreach (var item in path)
             {
                 if(stopNavigating)
@@ -717,7 +741,7 @@ public class MBT : IDalamudPlugin
                 {
                     if (item.Split('|')[1].Equals("BetweenAreas"))
                     {
-                        while (Condition[ConditionFlag.BetweenAreas])
+                        while (DalamudAPI.Condition[ConditionFlag.BetweenAreas])
                         {
                             await Task.Delay(500);
                             PluginLog.Information("Waiting for BetweenAreas");
@@ -727,19 +751,23 @@ public class MBT : IDalamudPlugin
                     }
                     continue;
                 }
-                else if (item.Split('|')[0].Equals("Interactable"))
+                else if (item.Split('|')[0].Equals("Interactable") || item.Split('|')[0].Equals("TreasureCoffer"))
                 {
                     await Task.Delay(2000);
                     try
                     {
-                        var baseObjs = ObjectTable.Where(x => x.Name.ToString().Contains(item.Split('|')[1]));
+                        IEnumerable<GameObject> baseObjs;
+                        if (item.Split('|')[0].Equals("TreasureCoffer"))
+                            baseObjs = ObjectTable.Where(x => x.Name.ToString().Contains("Treasure Coffer"));
+                        else
+                            baseObjs = ObjectTable.Where(x => x.Name.ToString().Contains(item.Split('|')[1]));
                         if (baseObjs.Count() == 0)
                             continue;
 
                         var baseObj = baseObjs.First();
                         if (baseObjs.Count() > 1)
                         { 
-                            //get objectr with closest distance
+                            //get object with closest distance
                             var closestDistance = 999999999999999;
                             var player = ClientState.LocalPlayer;
                             foreach (var Obj in baseObjs)
@@ -769,35 +797,7 @@ public class MBT : IDalamudPlugin
                 }
                 else if (item.Split('|')[0].Equals("SelectYesno"))
                 {
-                    try
-                    {
-                        nint addon;
-                        int cnt = 0;
-                        while ((addon = GameGui.GetAddonByName("SelectYesno", 1)) == 0 && (cnt++ < 500))
-                            await Task.Delay(10);
-                        if (addon == 0)
-                            continue;
-                        await Task.Delay(25);
-                        //PluginLog.Info("addon: "+addon.ToString());
-                        if (item.Split('|')[1].Equals(""))
-                            ClickSelectYesNo.Using(addon).Yes();
-                        else
-                        {
-                            if (item.Split('|')[1].ToUpper().Equals("YES"))
-                            {
-                                ClickSelectYesNo.Using(addon).Yes();
-                            }
-                            else if (item.Split('|')[1].ToUpper().Equals("NO"))
-                            {
-                                ClickSelectYesNo.Using(addon).No();
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        PluginLog.Error(ex.ToString());
-                    }
-                    await Task.Delay(50);
+                    await SelectYesNo(item.Split('|')[1]);
                     continue;
                 }
                 else if (item.Split('|')[0].Equals("Boss"))
@@ -817,6 +817,51 @@ public class MBT : IDalamudPlugin
                         continue;
                     targetPosSet = true;
                     targetPos = new RcVec3f(objs.First().Position.X, objs.First().Position.Y, objs.First().Position.Z);
+                }
+                else if (item.Split('|')[0].Equals("DutySpecificCode"))
+                {
+                    switch (ClientState.TerritoryType)
+                    {
+                        case 1036:
+                            PluginLog.Info("Sastasha");
+                            switch (item.Split('|')[1])
+                            {
+                                case "1":
+                                    var b = ObjectTable.FirstOrDefault(a => a.IsTargetable && (OID)a.DataId is OID.Blue or OID.Red or OID.Green);
+                                    if (b != null)
+                                    {
+                                        GlobalStringStore = ((OID)b.DataId).ToString();
+                                        PluginLog.Info(((OID)b.DataId).ToString());
+                                    }
+                                    break;
+                                case "2":
+                                    var a = ObjectTable.Where(a => a.Name.ToString().Equals(GlobalStringStore + " Coral Formation")).First();
+                                    if (a != null)
+                                    {
+                                        PluginLog.Info("Found Obj (" + a.Name.ToString() + ")- Moving");
+                                        _runner.Precision = 2.5f;
+                                        Navigate(new RcVec3f(ClientState.LocalPlayer.Position.X, ClientState.LocalPlayer.Position.Y, ClientState.LocalPlayer.Position.Z), new RcVec3f(a.Position.X, a.Position.Y, a.Position.Z));
+                                        while (_runner.NaviPts.Count != 0)
+                                            await Task.Delay(5);
+                                        PluginLog.Info("Done Moving - Interacting with Obj");
+                                        var cnt = 0;
+                                        while (cnt++ < 4)
+                                        {
+                                            InteractWithObject(a);
+                                            await Task.Delay(1000);
+                                        }
+                                        PluginLog.Info("Done Interacting with Obj - Selecting Yes");
+                                        await SelectYesNo("YES");
+                                        PluginLog.Info("Done Selecting Yes");
+                                        _runner.Precision = .1f;
+                                    }
+                                    break;
+                                default: break;
+                            }
+                            break;  
+                        default: break;
+                    }
+                    continue;
                 }
                 else if (item.Split('|')[0].Equals("ExitDuty"))
                 {
@@ -855,6 +900,16 @@ public class MBT : IDalamudPlugin
                 if (boss)
                 {
                     await Task.Delay(5000);
+                    //get our BossObject
+                    var bossObject = GetBossObject();
+                    if (bossObject != null)
+                    {
+                        PluginLog.Info("Boss: " + bossObject.Name);
+                    }
+                    else
+                    {
+                        PluginLog.Info("Boss: We were unable to determine our Boss Object");
+                    }
                     ChatCommand.ExecuteCommand("/vbm aioff");
                     //switch our class type
                     switch (ClientState.LocalPlayer.ClassJob.GameData.Role)
@@ -870,13 +925,27 @@ public class MBT : IDalamudPlugin
                             followTargetObject = GetTrustTankMemberObject();
                             break;
                     }
-                    followTarget = followTargetObject.Name.ToString();
-                    follow = true;
-                    followDistance = 0;
-                    
-                    while (Condition[ConditionFlag.InCombat])
+                    if (followTargetObject != null)
                     {
-                        await Task.Delay(5);
+                        followTarget = followTargetObject.Name.ToString();
+                        follow = true;
+                        followDistance = 0;
+                    }
+                    if (bossObject != null)
+                    {
+                        PluginLog.Info("Boss: waiting while InCombat and while !" + bossObject.Name + ".IsDead");
+                        while (Condition[ConditionFlag.InCombat] && !bossObject.IsDead)
+                        {
+                            await Task.Delay(5);
+                        }
+                    }
+                    else
+                    {
+                        PluginLog.Info("Boss: We were unable to determine our Boss Object waiting while InCombat");
+                        while (Condition[ConditionFlag.InCombat])
+                        {
+                            await Task.Delay(5);
+                        }
                     }
                     follow = false;
                     boss = false;
@@ -890,17 +959,81 @@ public class MBT : IDalamudPlugin
             PluginLog.Error(ex.ToString());
         }
     }
+    private static async Task<bool> SelectYesNo(string YesorNo)
+    {
+        try
+        {
+            nint addon;
+            int cnt = 0;
+            while ((addon = GameGui.GetAddonByName("SelectYesno", 1)) == 0 && (cnt++ < 500))
+                await Task.Delay(10);
+            if (addon == 0)
+                return false;
+            await Task.Delay(25);
+
+            if (YesorNo.Equals(""))
+                ClickSelectYesNo.Using(addon).Yes();
+            else
+            {
+                if (YesorNo.Equals("YES"))
+                {
+                    ClickSelectYesNo.Using(addon).Yes();
+                }
+                else if (YesorNo.Equals("NO"))
+                {
+                    ClickSelectYesNo.Using(addon).No();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error(ex.ToString());
+            return false;
+        }
+        await Task.Delay(50);
+        return true;
+    }
+    private BattleChara GetBossObject()
+    {
+        var objs = GetObjectInRadius(ObjectTable, 30);
+        var battleCharaObjs = objs.OfType<BattleChara>();
+        BattleChara bossObject = default;
+        foreach (var obj in battleCharaObjs)
+        {
+            PluginLog.Info("Checking: " + obj.Name.ToString());
+            if (IsBossFromIcon(obj))
+                bossObject = obj;
+        }
+
+        return bossObject;
+    }
     private GameObject GetGroupMemberObjectByRole(int role)
     {
         return PartyList.Where(s => s.ClassJob.GameData.Role == role).First().GameObject;
     }
     private GameObject GetTrustTankMemberObject()
     {
-        return BuddyList.Where(s => s.GameObject.Name.ToString().Contains("Marauder") || s.GameObject.Name.ToString().Contains("") || s.GameObject.Name.ToString().Contains("Ysayle") || s.GameObject.Name.ToString().Contains("Temple Knight") || s.GameObject.Name.ToString().Contains("Haurchefant") || s.GameObject.Name.ToString().Contains("Pero Roggo") || s.GameObject.Name.ToString().Contains("Aymeric") || s.GameObject.Name.ToString().Contains("House Fortemps Knight") || s.GameObject.Name.ToString().Contains("Carvallain") || s.GameObject.Name.ToString().Contains("Gosetsu") || s.GameObject.Name.ToString().Contains("Hien") || s.GameObject.Name.ToString().Contains("Resistance Fighter") || s.GameObject.Name.ToString().Contains("Arenvald") || s.GameObject.Name.ToString().Contains("Emet-Selch") || s.GameObject.Name.ToString().Contains("Venat") || s.GameObject.Name.ToString().Contains("Varshahn") || s.GameObject.Name.ToString().Contains("Thancred") || s.GameObject.Name.ToString().Contains("G'raha Tia") || s.GameObject.Name.ToString().Contains("Crystal Exarch")).First().GameObject;
+        try
+        {
+            return BuddyList.Where(s => s.GameObject.Name.ToString().Contains("Marauder") || s.GameObject.Name.ToString().Contains("") || s.GameObject.Name.ToString().Contains("Ysayle") || s.GameObject.Name.ToString().Contains("Temple Knight") || s.GameObject.Name.ToString().Contains("Haurchefant") || s.GameObject.Name.ToString().Contains("Pero Roggo") || s.GameObject.Name.ToString().Contains("Aymeric") || s.GameObject.Name.ToString().Contains("House Fortemps Knight") || s.GameObject.Name.ToString().Contains("Carvallain") || s.GameObject.Name.ToString().Contains("Gosetsu") || s.GameObject.Name.ToString().Contains("Hien") || s.GameObject.Name.ToString().Contains("Resistance Fighter") || s.GameObject.Name.ToString().Contains("Arenvald") || s.GameObject.Name.ToString().Contains("Emet-Selch") || s.GameObject.Name.ToString().Contains("Venat") || s.GameObject.Name.ToString().Contains("Varshahn") || s.GameObject.Name.ToString().Contains("Thancred") || s.GameObject.Name.ToString().Contains("G'raha Tia") || s.GameObject.Name.ToString().Contains("Crystal Exarch")).First().GameObject;
+        }
+        catch (Exception ex) 
+        {
+            return null;
+            //
+        }
     }
     private GameObject GetTrustHealerMemberObject()
     {
-        return BuddyList.Where(s => s.GameObject.Name.ToString().Contains("Conjurer") || s.GameObject.Name.ToString().Contains("Temple Chirurgeon") || s.GameObject.Name.ToString().Contains("Mol Youth") || s.GameObject.Name.ToString().Contains("Doman Shaman") || s.GameObject.Name.ToString().Contains("Venat") || s.GameObject.Name.ToString().Contains("Alphinaud") || s.GameObject.Name.ToString().Contains("Urianger") || s.GameObject.Name.ToString().Contains("Y'shtola") || s.GameObject.Name.ToString().Contains("Crystal Exarch") || s.GameObject.Name.ToString().Contains("G'raha Tia") ).First().GameObject;
+        try
+        {
+            return BuddyList.Where(s => s.GameObject.Name.ToString().Contains("Conjurer") || s.GameObject.Name.ToString().Contains("Temple Chirurgeon") || s.GameObject.Name.ToString().Contains("Mol Youth") || s.GameObject.Name.ToString().Contains("Doman Shaman") || s.GameObject.Name.ToString().Contains("Venat") || s.GameObject.Name.ToString().Contains("Alphinaud") || s.GameObject.Name.ToString().Contains("Urianger") || s.GameObject.Name.ToString().Contains("Y'shtola") || s.GameObject.Name.ToString().Contains("Crystal Exarch") || s.GameObject.Name.ToString().Contains("G'raha Tia") ).First().GameObject;
+        }
+        catch (Exception ex)
+        {
+            return null;
+            //
+        }
     }
     public unsafe void InteractWithObject(GameObject baseObj)
     {
@@ -955,18 +1088,65 @@ public class MBT : IDalamudPlugin
             //PluginLog.Info("Our Healer is: " + go.Name.ToString());
             //go = GetGroupMemberObjectByRole(1);
             //PluginLog.Info("Our Tank is: " + go.Name.ToString());
-            var healer = GetTrustHealerMemberObject();
-            var tank = GetTrustTankMemberObject();
-            PluginLog.Info("Tank: " + tank.Name);
-            PluginLog.Info("Healer: " + healer.Name);
-        }
+            //PluginLog.Info("Boss: " + IsBossFromIcon((BattleChara)TargetManager.Target));;
+
+            /*var objs = GetObjectInRadius(ObjectTable, 30);
+            foreach (var obj in objs) 
+            {
+                PluginLog.Info("Name: " + obj.Name.ToString() + " Distance: " + DistanceToPlayer(obj));            
+            }*/
+            /*var objs = GetObjectInRadius(ObjectTable, 30);
+            var battleCharaObjs = objs.OfType<BattleChara>();
+            GameObject bossObject = default;
+            foreach (var obj in battleCharaObjs)
+            {
+                PluginLog.Info("Checking: " + obj.Name.ToString());
+                if (IsBossFromIcon(obj))
+                    bossObject = obj;
+            }
+            if (bossObject)
+                PluginLog.Info("Boss: " + bossObject.Name.ToString());*/
+            //PluginLog.Info(DistanceToPlayer(TargetManager.Target).ToString());
+            /*var v3o = new RcVec3f(-113.888f, 150, 210.794f);
+             var path = meshesDirectory + "/" + ClientState.TerritoryType.ToString() + ".navmesh";
+             var fileStream = File.Open(path, FileMode.Open);
+             var nmd = new NavMeshDetour();
+             var point = nmd.FindNearestPolyPoint(v3o, new RcVec3f(0, 200, 0), fileStream);
+             PluginLog.Info(point.ToString());
+             Navigate(new RcVec3f(ClientState.LocalPlayer.Position.X, ClientState.LocalPlayer.Position.Y, ClientState.LocalPlayer.Position.Z), point);*/
+            var i = ObjectTable.OrderBy(o => DistanceToPlayer(o)).Where(p => p.Name.ToString().ToUpper().Equals("MINERAL DEPOSIT"));
+
+            foreach (var o in i) 
+            { 
+                PluginLog.Info(o.Name.ToString() + " - " + DistanceToPlayer(o).ToString() + " IsTargetable" + o.IsTargetable);
+            }
+         }
         catch (Exception e)
         {
             PluginLog.Error(e.ToString());
             //throw;
         }
     }
+    private GameObject FindClosestObjectByName(string name)
+    {
+        return ObjectTable.OrderBy(o => DistanceToPlayer(o)).Where(p => p.Name.Equals(name)).FirstOrDefault();
+    }
+    public static bool IsBossFromIcon(BattleChara obj)
+    {
+        if (obj == null) return false;
 
+        //Icon
+        if (GetObjectNPC(obj)?.Rank is 1 or 2 /*or 4*/ or 6) return true;
+
+        return false;
+    }
+
+    public enum OID : uint
+    {
+        Blue = 0x1E8554,
+        Red = 0x1E8A8C,
+        Green = 0x1E8A8D,
+    }
     private void Condition_OnConditionChange(ConditionFlag flag, bool value)
     {
         PluginLog.Info(flag.ToString());

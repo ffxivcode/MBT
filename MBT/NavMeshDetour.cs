@@ -38,6 +38,13 @@ namespace MBT
                 return null;
             }
         }
+        public RcVec3f FindNearestPolyPoint(RcVec3f startPos, RcVec3f halfExtents, FileStream file)
+        {
+            var navQuery = new DtNavMeshQuery(LoadNavMesh(file));
+            navQuery.FindNearestPoly(startPos, halfExtents, m_filter, out var refdfd, out var polyPoint, out var _);
+            DalamudAPI.PluginLog.Info(refdfd.ToString());
+            return polyPoint;
+        }
         public List<DtStraightPath> QueryPath(RcVec3f startPos, RcVec3f endPos, FileStream file)
         {
             var navQuery = new DtNavMeshQuery(LoadNavMesh(file));
