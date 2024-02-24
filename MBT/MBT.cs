@@ -12,7 +12,6 @@ using System.Text;
 using TinyIpc.Messaging;
 using static ECommons.DalamudServices.Svc;
 using System.IO;
-using System.Threading.Tasks;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI;

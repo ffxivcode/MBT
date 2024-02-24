@@ -11,7 +11,6 @@ namespace MBT;
 public class MainWindow : Window, IDisposable
 {
     private readonly MBT Plugin;
-    private int currentTab = 1;
     
     public MainWindow(MBT plugin) : base(
         "Multi Boxer Toolkit: /mbt", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoResize)
