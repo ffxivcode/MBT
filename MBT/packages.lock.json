@@ -8,30 +8,6 @@
         "resolved": "2.1.12",
         "contentHash": "Sc0PVxvgg4NQjcI8n10/VfUQBAS4O+Fw2pZrAqBdRMbthYGeogzu5+xmIGCGmsEZ/ukMOBuAqiNiB5qA3MRalg=="
       },
-      "DotRecast.Detour": {
-        "type": "Direct",
-        "requested": "[2024.1.2, )",
-        "resolved": "2024.1.2",
-        "contentHash": "h2HxSZDxLutkz+Q9r4o2L6fPHVo9UVMCSOWkZYFZXSIbmY7z8eivETKRfxKfFCt5V6TI2fmhJ26TgODF3SMniA==",
-        "dependencies": {
-          "DotRecast.Core": "2024.1.2"
-        }
-      },
-      "DotRecast.Recast": {
-        "type": "Direct",
-        "requested": "[2024.1.2, )",
-        "resolved": "2024.1.2",
-        "contentHash": "sqUrwHps7lguzn0QEnDCOsQGXqsnGGo36me4OMOgkJC8s4tvLmRtx0Enz6kyf7yb9IXC5cW/F4ZRbREG5QsO/A==",
-        "dependencies": {
-          "DotRecast.Core": "2024.1.2"
-        }
-      },
-      "Reloaded.Memory": {
-        "type": "Direct",
-        "requested": "[7.1.0, )",
-        "resolved": "7.1.0",
-        "contentHash": "4Y5tCsRWdW/shj9W7RqJq37LStuW1VVtjxsBp4LKZilPcjudeQg9k+u+6fnDgacCEJiG3S2EtcaiNtVMTdaSnQ=="
-      },
       "TinyIpc": {
         "type": "Direct",
         "requested": "[4.3.0, )",
@@ -44,11 +20,6 @@
           "Microsoft.Extensions.Options": "8.0.0",
           "Microsoft.IO.RecyclableMemoryStream": "3.0.0"
         }
-      },
-      "DotRecast.Core": {
-        "type": "Transitive",
-        "resolved": "2024.1.2",
-        "contentHash": "KAwSxaoC/01DceO+VVvfgn9NU5vg0/kmp8DKk8kUGnz7tkcTmIzV/7Qib361pnKIFDaOwHYzN7FGefBtnpO8nQ=="
       },
       "MessagePack": {
         "type": "Transitive",
@@ -106,6 +77,9 @@
         "type": "Transitive",
         "resolved": "6.0.0",
         "contentHash": "/iUeP3tq1S0XdNNoMz5C9twLSrM/TH+qElHkXWaPvuNOt+99G75NrV0OS2EqHx5wMN7popYjpc8oTjC1y16DLg=="
+      },
+      "ecommons": {
+        "type": "Project"
       }
     }
   }

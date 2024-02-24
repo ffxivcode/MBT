@@ -10,18 +10,14 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 using TinyIpc.Messaging;
-using static MBT.DalamudAPI;
+using static ECommons.DalamudServices.Svc;
 using System.IO;
-using DotRecast.Core.Numerics;
-using DotRecast.Detour;
-using Dalamud.Game.ClientState.Conditions;
-using System.Text.Json;
 using System.Threading.Tasks;
-using FFXIVClientStructs.FFXIV.Client.Game.Control;
-using ClickLib.Clicks;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
-
+using FFXIVClientStructs.FFXIV.Client.UI;
+using ECommons;
+using AutoDuty.Managers;
 namespace MBT;
 
 /// <summary>
@@ -62,10 +58,6 @@ public class MBT : IDalamudPlugin
     TinyMessageBus messagebus2 = new("DalamudBroadcaster");
     TinyMessageBus messagebus3 = new("DalamudBroadcasterSpread");
 
-    XIVRunner.XIVRunner _runner;
-    XIVRunner.XIVRunner _runnerFollow;
-    XIVRunner.XIVRunner _runnerIC;
-
     public DirectoryInfo configDirectory;
     public DirectoryInfo meshesDirectory; 
     public DirectoryInfo pathsDirectory;
@@ -75,49 +67,20 @@ public class MBT : IDalamudPlugin
     {
         try
         {
-            Initialize(pluginInterface);
             Plugin = this;
-
-            configDirectory = pluginInterface.ConfigDirectory;
-            meshesDirectory = new DirectoryInfo(configDirectory.FullName.Replace(Plugin.Name, "") + "\\Meshes");
-            pathsDirectory = new DirectoryInfo(configDirectory.FullName + "/paths");
-
-            if (!configDirectory.Exists)
-                configDirectory.Create();
-            if (!meshesDirectory.Exists)
-                meshesDirectory.Create();
-            if(!pathsDirectory.Exists)
-                pathsDirectory.Create();
-            
-            _runnerFollow = XIVRunner.XIVRunner.Create(pluginInterface);
-            _runnerFollow.Enable = true;
-            _runnerFollow.Precision = followDistance + .1f;
-            _runnerFollow.UseMount = false;
-            _runnerFollow.TryJump = false;
-            
-            _runner = XIVRunner.XIVRunner.Create(pluginInterface);
-            _runner.Enable = true;
-            _runner.Precision = .1f;
-            _runner.UseMount = false;
-            _runner.TryJump = false;
-
-            _runnerIC = XIVRunner.XIVRunner.Create(pluginInterface);
-            _runnerIC.Enable = true;
-            _runnerIC.Precision = .1f;
-            _runnerIC.UseMount = false;
-            _runnerIC.TryJump = false;
+            ECommonsMain.Init(pluginInterface, this, Module.All);
 
             //Create MainWindow UI
             MainWindow = new MainWindow(this);
             WindowSystem.AddWindow(MainWindow);
 
             //Add Commands  ---- More to come
-            CommandManager.AddHandler("/bc", new CommandInfo(OnCommandBC)
+            Commands.AddHandler("/bc", new CommandInfo(OnCommandBC)
             {
                 HelpMessage = "/bc fw=toon1,toon2,ETC or all or allbutme or allbut,toon1,toon2,ETC (Remove Space from ToonsFullName) C=/commandname args\"\n" +
                 "example: /bc FW=ALL C=/mbt ft Toon Name"
             });
-            CommandManager.AddHandler("/mbt", new CommandInfo(OnCommand)
+            Commands.AddHandler("/mbt", new CommandInfo(OnCommand)
             {
                 HelpMessage = "/mbt -> opens main window\n" +
                 "/mbt cometome or ctm Player Name -> Immediately ends all movement and move's straight to Player\n" +
@@ -132,7 +95,6 @@ public class MBT : IDalamudPlugin
             //Draw UI
             PluginInterface.UiBuilder.Draw += DrawUI;
             PluginInterface.UiBuilder.OpenMainUi += OpenMainUI;
-            ChatCommand.Initialize();
 
             //Attach our OnGameFrameworkUpdate function to our game's Framework Update (called once every frame)
             Framework.Update += OnGameFrameworkUpdate;
@@ -153,7 +115,7 @@ public class MBT : IDalamudPlugin
 
             OpenMainUI();
         }
-        catch (Exception e) { PluginLog.Info($"Failed loading plugin\n{e}"); }
+        catch (Exception e) { Log.Info($"Failed loading plugin\n{e}"); }
     }
     private static unsafe void AcceptDuty()
     {
@@ -220,11 +182,11 @@ public class MBT : IDalamudPlugin
     private void Spread()
     {
         if (ClientState.LocalPlayer == null) return;
-        if (PartyList == null) return;
+        if (Party == null) return;
         var playerObjectId = ClientState.LocalPlayer.ObjectId;
         List<uint> partyList = new();
 
-        foreach (var partyMember in PartyList)
+        foreach (var partyMember in Party)
         {
             if (partyMember.ObjectId == ClientState.LocalPlayer.ObjectId) { continue; }
 
@@ -235,7 +197,7 @@ public class MBT : IDalamudPlugin
         for(int i = 0; i < partyList.Count; i++)
         {
             var j = i + 1;
-            PluginLog.Info("OnCommandSpread: PartyList: " + partyList[i] + " : " + playerObjectId + "," + partyList[i] + "," + "*" + j + "*");
+            Log.Info("OnCommandSpread: PartyList: " + partyList[i] + " : " + playerObjectId + "," + partyList[i] + "," + "*" + j + "*");
             messagebus3.PublishAsync(Encoding.UTF8.GetBytes(playerObjectId + "," + partyList[i] + "," + "*" + j +"*"));
         }
     }
@@ -259,37 +221,37 @@ public class MBT : IDalamudPlugin
 
         if (forWhos.Any(i => i.Equals(ClientState.LocalPlayer.Name.ToString().ToUpper().Replace(" ", ""))))
         {
-            PluginLog.Info(message.Substring(message.IndexOf("C=") + 2));
-            ChatCommand.ExecuteCommand(message.Substring(message.IndexOf("C=") + 2));
+            Log.Info(message.Substring(message.IndexOf("C=") + 2));
+            ECommons.Automation.Chat.Instance.ExecuteCommand(message.Substring(message.IndexOf("C=") + 2));
         }
     }
 
     private void MessageReceivedSpread(string message)
     {
-        PluginLog.Info("MessageRecieved: " + message);
+        Log.Info("MessageRecieved: " + message);
         if (ClientState.LocalPlayer == null) return;
         follow = false;
         spreading = true;
         var messageList = message.Split(',').ToList();
         var playerObjectId = ClientState.LocalPlayer.ObjectId;
-        PluginLog.Info("messageList.Count: " + messageList.Count + " messageList[0]: " + messageList[0] + " messageList[1]: " + messageList[1] + " messageList[2]: " + messageList[2]);
+        Log.Info("messageList.Count: " + messageList.Count + " messageList[0]: " + messageList[0] + " messageList[1]: " + messageList[1] + " messageList[2]: " + messageList[2]);
         
         if (Convert.ToUInt32(messageList[1]) == playerObjectId)
         {
-            var sender = ObjectTable.Where(s => s.ObjectId == Convert.ToUInt32(messageList[0]));
+            var sender = Objects.Where(s => s.ObjectId == Convert.ToUInt32(messageList[0]));
             if (sender != null)
             {
                 var pos = sender.First().Position;
                 switch (messageList[2])
                 {
                     case "*1*":
-                        _runner.NaviPts.Enqueue(new Vector3(pos.X - 10, pos.Y, pos.Z));
+                        IPCManager.VNavmesh_MoveTo(new Vector3(pos.X - 10, pos.Y, pos.Z));
                         break;
                     case "*2*":
-                        _runner.NaviPts.Enqueue(new Vector3(pos.X + 10, pos.Y, pos.Z + 5));
+                        IPCManager.VNavmesh_MoveTo(new Vector3(pos.X + 10, pos.Y, pos.Z + 5));
                         break;
                     case "*3*":
-                        _runner.NaviPts.Enqueue(new Vector3(pos.X + 10, pos.Y, pos.Z - 5));
+                        IPCManager.VNavmesh_MoveTo(new Vector3(pos.X + 10, pos.Y, pos.Z - 5));
                         break;
                 }
             }
@@ -298,9 +260,9 @@ public class MBT : IDalamudPlugin
     public void SetTarget()
     {
         //If PlayerCharacter's target is not null, Set our followTarget InputText to our Target Object's .Name field
-        if (TargetManager.Target != null)
+        if (Targets.Target != null)
         {
-            followTarget = TargetManager.Target.Name.ToString();
+            followTarget = Targets.Target.Name.ToString();
         }
     }
     public void SetFollowStatus(bool sts, string name, string distance, Vector4 color)
@@ -318,18 +280,9 @@ public class MBT : IDalamudPlugin
         textFollow2Color = color;
         textFollow3Color = color;
     }
-    private GameObject GetGameObjectFromName(string _objectName)
-    {
-        var obj = ObjectTable;
-        if (obj == null) return null;
 
-        var objs = obj.Where(s => s.Name.ToString() == _objectName);
+    private static GameObject? GetGameObjectFromName(string _objectName) => Objects.First(s => s.Name.ToString() == _objectName);
 
-        if (!objs.Any())
-            return null;
-        else
-            return objs.First();
-    }
     public bool GetFollowTargetObject()
     {
         var ftarget = GetGameObjectFromName(followTarget);
@@ -338,7 +291,7 @@ public class MBT : IDalamudPlugin
             followTargetObject = null;
             SetFollowStatus(false, followTarget + " not found", "0", new(255f, 0f, 0f, 1f));
             if (following)
-                _runner.NaviPts.Clear();
+                IPCManager.VNavmesh_Stop();
             return false;
         }
         else
@@ -354,8 +307,11 @@ public class MBT : IDalamudPlugin
         if (!follow)
         {
             SetFollowStatus(false, "", "", new(255f, 0f, 0f, 1f));
-            if (_runnerFollow.MovingValid && !spreading)
-                _runnerFollow.NaviPts.Clear();
+            if (following && !spreading)
+            {
+                IPCManager.VNavmesh_Stop();
+                following = false;
+            }
             return;
         }
 
@@ -385,17 +341,20 @@ public class MBT : IDalamudPlugin
                 //{
                 //    if (player.TargetObjectId != followTargetObject.TargetObjectId && followTargetObject.TargetObjectId != 0)
                 //    {
-                //        PluginLog.Info("1");
-                //        TargetManager.Target = followTargetObject.TargetObject;
-                //        PluginLog.Info("Follow:" + followTargetObject.TargetObject.Name);
+                //        Log.Info("1");
+                //        Targets.Target = followTargetObject.TargetObject;
+                //        Log.Info("Follow:" + followTargetObject.TargetObject.Name);
 
                 //    }
                 //}
                 if (!follow)
                 {
                     SetFollowStatus(false, "", "", new(255f, 0f, 0f, 1f));
-                    if (_runnerFollow.MovingValid && !spreading)
-                        _runnerFollow.NaviPts.Clear();
+                    if (following && !spreading)
+                    {
+                        IPCManager.VNavmesh_Stop(); 
+                        following = false;
+                    }
                     return;
                 }
                 var distance = Convert.ToInt32(Vector3.Distance(new Vector3(player.Position.X, player.Position.Y, player.Position.Z), new Vector3(followTargetObject.Position.X, followTargetObject.Position.Y, followTargetObject.Position.Z)));
@@ -406,23 +365,25 @@ public class MBT : IDalamudPlugin
                 {
                     following = true;
                     //Move.Move.MoveTo(true, followTargetObject.Position, followDistance);
-                    _runnerFollow.Precision = followDistance + .1f;
-                    _runner.NaviPts.Clear();
-                    _runnerFollow.NaviPts.Enqueue(followTargetObject.Position);
+                    IPCManager.VNavmesh_SetTolerance(followDistance + .1f);
+                    IPCManager.VNavmesh_MoveTo(followTargetObject.Position);
                 }
                 else if (following)
                 {
                     following = false;
                     //Move.Move.MoveTo(false);
-                    _runnerFollow.NaviPts.Clear();
+                    IPCManager.VNavmesh_Stop();
                 }
             }
             catch (Exception e)
             {
-                PluginLog.Error(e.ToString());
+                Log.Error(e.ToString());
                 SetFollowStatus(false, "", "", new(255f, 0f, 0f, 1f));
                 if (following)
-                    _runnerFollow.NaviPts.Clear();
+                {
+                    following = false;
+                    IPCManager.VNavmesh_Stop();
+                }
                 //throw;
             }
         }
@@ -430,26 +391,22 @@ public class MBT : IDalamudPlugin
         {
             SetFollowStatus(false, "No follow target set", "", new(255f, 0f, 0f, 1f));
             if (following)
-                _runnerFollow.NaviPts.Clear();
+            {
+                following = false;
+                IPCManager.VNavmesh_Stop();
+            }
         }
     }
     public void Dispose()
     {
-        //RemoveAllWindows and Dispose of them, Disable FrameworkUpdate and remove Commands and change back to Legacy if needed
+        //RemoveAllWindows and Dispose of them, Disable FrameworkUpdate and remove Commands
         WindowSystem.RemoveAllWindows();
-        ((IDisposable)MainWindow).Dispose();
+        MainWindow.Dispose();
         Framework.Update -= OnGameFrameworkUpdate;
-        //Condition.ConditionChange -= Condition_OnConditionChange;
-        CommandManager.RemoveHandler("/mbt"); 
-        CommandManager.RemoveHandler("/bc");
-        _runnerFollow.NaviPts.Clear();
-        _runner.NaviPts.Clear();
-        _runnerIC.NaviPts.Clear();
+        Commands.RemoveHandler("/mbt");
+        Commands.RemoveHandler("/bc");
         messagebus1.Dispose();
         messagebus2.Dispose();
-        _runnerFollow?.Dispose();
-        _runner?.Dispose();
-        _runnerIC?.Dispose();
     }
     private void OpenMainUI()
     {
@@ -463,13 +420,13 @@ public class MBT : IDalamudPlugin
         {
             follow = true;
             spreading = false;
-            _runnerFollow.NaviPts.Clear();
+            IPCManager.VNavmesh_Stop();
         }
         else if (args.ToUpper().Contains("FOLLOW OFF") || args.ToUpper().Contains("FOFF"))
         {
             follow = false;
             following = false;
-            _runnerFollow.NaviPts.Clear();
+            IPCManager.VNavmesh_Stop();
         }
         else if (args.ToUpper().Contains("COMETOME "))
         {
@@ -477,8 +434,8 @@ public class MBT : IDalamudPlugin
             if (go != null)
             {
                 StopAllMovement();
-                _runner.Precision = 0.1f;
-                _runner.NaviPts.Enqueue(go.Position);
+                IPCManager.VNavmesh_SetTolerance(0.1f);
+                IPCManager.VNavmesh_MoveTo(go.Position);
             }
         }
         else if (args.ToUpper().Contains("CTM "))
@@ -487,8 +444,8 @@ public class MBT : IDalamudPlugin
             if (go != null)
             {
                 StopAllMovement();
-                _runner.Precision = 0.1f;
-                _runner.NaviPts.Enqueue(go.Position);
+                IPCManager.VNavmesh_SetTolerance(0.1f);
+                IPCManager.VNavmesh_MoveTo(go.Position);
             }
         }
         else if (args.ToUpper().Contains("FOLLOWTARGET "))
@@ -509,7 +466,7 @@ public class MBT : IDalamudPlugin
         }
         else if (args.ToUpper().Contains("SPREAD"))
         {
-            _runner.NaviPts.Clear();
+            IPCManager.VNavmesh_Stop();
             Spread();
         }
         else if (args.ToUpper().Contains("ACCEPTDUTY") || args.ToUpper().Contains("AD"))
@@ -534,7 +491,7 @@ public class MBT : IDalamudPlugin
 
         if (!args.ToUpper().Contains("FW=") || !args.ToUpper().Contains("C="))
         {
-            ChatGui?.Print(new XivChatEntry
+            Chat?.Print(new XivChatEntry
             {
                 Message = "Broadcast: syntax = /broadcast FW=TOON1,TOON2,ETC or ALL or ALLBUTME or ALLBUT,TOON1,TOON2,ETC (Remove Space from ToonsFullName) C=/commandname args"
             });
@@ -560,25 +517,21 @@ public class MBT : IDalamudPlugin
     {
         follow = false;
         following = false;
-        stopNavigating = true;
         spreading = false;
-        _runnerFollow.NaviPts.Clear();
-        _runnerIC.NaviPts.Clear();
-        _runner.NaviPts.Clear();
+        IPCManager.VNavmesh_Stop();
     }
     public unsafe void teleportX(int amount)
     {
         //Teleport
         try
-        {
-
+        { 
             var player = ClientState.LocalPlayer;
             SetPos.SetPosPos(player.Position + new Vector3(amount, 0,
             0));
         }
         catch (Exception e)
         {
-            PluginLog.Error(e.ToString());
+            Log.Error(e.ToString());
             //throw;
         }
     }
@@ -595,7 +548,7 @@ public class MBT : IDalamudPlugin
         }
         catch (Exception e)
         {
-            PluginLog.Error(e.ToString());
+            Log.Error(e.ToString());
             //throw;
         }
     }
@@ -611,7 +564,7 @@ public class MBT : IDalamudPlugin
         }
         catch (Exception e)
         {
-            PluginLog.Error(e.ToString());
+            Log.Error(e.ToString());
             //throw;
         }
     }
@@ -622,16 +575,16 @@ public class MBT : IDalamudPlugin
         //Teleport
         try
         {
-            if (TargetManager.Target != null)
+            if (Targets.Target != null)
             {
                 var player = ClientState.LocalPlayer;
-                SetPos.SetPosPos(TargetManager.Target.Position);
+                SetPos.SetPosPos(Targets.Target.Position);
             }
             
         }
         catch (Exception e)
         {
-            PluginLog.Error(e.ToString());
+            Log.Error(e.ToString());
             //throw;
         }
     }
@@ -643,7 +596,7 @@ public class MBT : IDalamudPlugin
         }
         catch (Exception e)
         {
-            PluginLog.Error(e.ToString());
+            Log.Error(e.ToString());
             //throw;
         }
     }
@@ -656,7 +609,7 @@ public class MBT : IDalamudPlugin
         }
         catch (Exception e)
         {
-            PluginLog.Error(e.ToString());
+            Log.Error(e.ToString());
             //throw;
         }
     }
@@ -665,388 +618,7 @@ public class MBT : IDalamudPlugin
         //Add Start POS
         teleportPOS = ClientState.LocalPlayer.Position.ToString().Replace('<', ' ').Replace('>', ' ').Trim();
     }
-    public unsafe void Navigate(RcVec3f _startPos, RcVec3f _endPos)
-    {
-        //Navigate
-        try
-        {
-            var path = meshesDirectory + "/" + ClientState.TerritoryType.ToString() + ".navmesh";
-            var fileStream = File.Open(path, FileMode.Open);
-            var list = new List<DtStraightPath>();
-            var nmd = new NavMeshDetour();
-            list = nmd.QueryPath(_startPos, _endPos, fileStream);
-
-            //PluginLog.Info(list.Count.ToString());
-            _runner.Enable = false;
-            if (list.Count > 2) 
-            {
-                foreach (var item in list)
-                {
-                    //PluginLog.Info(item.pos.ToString());
-                    var v3 = new Vector3(item.pos.X, item.pos.Y, item.pos.Z);
-                    _runner.NaviPts.Enqueue(v3);
-                }
-            }
-            else
-            {
-                var v3 = new Vector3(_startPos.X, _startPos.Y, _startPos.Z);
-                _runner.NaviPts.Enqueue(v3);
-                v3 = new Vector3(_endPos.X, _endPos.Y, _endPos.Z);
-                _runner.NaviPts.Enqueue(v3);
-            }
-            _runner.Enable = true;
-        }
-        catch (Exception e)
-        {
-            PluginLog.Error(e.ToString());
-            //throw;
-        }
-    }
-    public void StopNavigating()
-    {
-        _runner.Enable = false;
-        _runnerIC.Enable = false;
-        _runner.NaviPts.Clear();
-        _runnerIC.NaviPts.Clear();
-        stopNavigating = true;
-    }
-    public async void NavigatePath()
-    {
-        try
-        {
-            if (!File.Exists(pathsDirectory + "/" + ClientState.TerritoryType.ToString() + ".json")) return;
-            string json = File.ReadAllText(pathsDirectory + "/" + ClientState.TerritoryType.ToString() + ".json");
-            var path = JsonSerializer.Deserialize<List<string>>(json);
-            //determine where to start depending on how many bosses are killed
-            foreach (var item in path)
-            {
-                if(stopNavigating)
-                {
-                    stopNavigating = false;
-                    return;
-                }
-                var targetPos = new RcVec3f();
-                var stopForCombat = true;
-                var targetPosSet = false;
-                var boss = false;
-                if (item.Split('|')[0].Equals("Wait"))
-                {
-                    if (item.Split('|')[1].Equals(""))
-                        await Task.Delay(50);
-                    else
-                        await Task.Delay(int.Parse(item.Split('|')[1]));
-                    continue;
-                }
-                else if (item.Split('|')[0].Equals("WaitFor"))
-                {
-                    if (item.Split('|')[1].Equals("BetweenAreas"))
-                    {
-                        while (DalamudAPI.Condition[ConditionFlag.BetweenAreas])
-                        {
-                            await Task.Delay(500);
-                            PluginLog.Information("Waiting for BetweenAreas");
-                            if (_runner.NaviPts.Count != 0)
-                                _runner.NaviPts.Clear();
-                        }
-                    }
-                    continue;
-                }
-                else if (item.Split('|')[0].Equals("Interactable") || item.Split('|')[0].Equals("TreasureCoffer"))
-                {
-                    await Task.Delay(2000);
-                    try
-                    {
-                        IEnumerable<GameObject> baseObjs;
-                        if (item.Split('|')[0].Equals("TreasureCoffer"))
-                            baseObjs = ObjectTable.Where(x => x.Name.ToString().Contains("Treasure Coffer"));
-                        else
-                            baseObjs = ObjectTable.Where(x => x.Name.ToString().Contains(item.Split('|')[1]));
-                        if (baseObjs.Count() == 0)
-                            continue;
-
-                        var baseObj = baseObjs.First();
-                        if (baseObjs.Count() > 1)
-                        { 
-                            //get object with closest distance
-                            var closestDistance = 999999999999999;
-                            var player = ClientState.LocalPlayer;
-                            foreach (var Obj in baseObjs)
-                            {
-                                var distance = Convert.ToInt32(Vector3.Distance(new Vector3(player.Position.X, player.Position.Y, player.Position.Z), new Vector3(Obj.Position.X, Obj.Position.Y, Obj.Position.Z)));
-                                if (distance < closestDistance)
-                                {
-                                    closestDistance = distance;
-                                    baseObj = Obj;
-                                }
-                            }
-                        }
-                        var cnt = 0;
-                        while (cnt++ < 4)
-                        {
-                            InteractWithObject(baseObj);
-                            await Task.Delay(1000);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        PluginLog.Error(ex.ToString());
-                    }
-
-                    await Task.Delay(50);
-                    continue;
-                }
-                else if (item.Split('|')[0].Equals("SelectYesno"))
-                {
-                    await SelectYesNo(item.Split('|')[1]);
-                    continue;
-                }
-                else if (item.Split('|')[0].Equals("Boss"))
-                {
-                    stopForCombat = false;
-                    targetPosSet = true;
-                    boss = true;
-                    if (item.Split('|')[1].Equals(""))
-                        targetPos = new RcVec3f(ClientState.LocalPlayer.Position.X, ClientState.LocalPlayer.Position.Y, ClientState.LocalPlayer.Position.Z);
-                    else
-                        targetPos = new RcVec3f(float.Parse(item.Split('|')[1].Split(',')[0]), float.Parse(item.Split('|')[1].Split(',')[1]), float.Parse(item.Split('|')[1].Split(',')[2]));
-                }
-                else if (item.Split('|')[0].Equals("MoveToObject"))
-                {
-                    var objs = ObjectTable.Where(x => x.Name.ToString().Contains(item.Split('|')[1]));
-                    if (objs.Count() == 0)
-                        continue;
-                    targetPosSet = true;
-                    targetPos = new RcVec3f(objs.First().Position.X, objs.First().Position.Y, objs.First().Position.Z);
-                }
-                else if (item.Split('|')[0].Equals("DutySpecificCode"))
-                {
-                    switch (ClientState.TerritoryType)
-                    {
-                        case 1036:
-                            PluginLog.Info("Sastasha");
-                            switch (item.Split('|')[1])
-                            {
-                                case "1":
-                                    var b = ObjectTable.FirstOrDefault(a => a.IsTargetable && (OID)a.DataId is OID.Blue or OID.Red or OID.Green);
-                                    if (b != null)
-                                    {
-                                        GlobalStringStore = ((OID)b.DataId).ToString();
-                                        PluginLog.Info(((OID)b.DataId).ToString());
-                                    }
-                                    break;
-                                case "2":
-                                    var a = ObjectTable.Where(a => a.Name.ToString().Equals(GlobalStringStore + " Coral Formation")).First();
-                                    if (a != null)
-                                    {
-                                        PluginLog.Info("Found Obj (" + a.Name.ToString() + ")- Moving");
-                                        _runner.Precision = 2.5f;
-                                        Navigate(new RcVec3f(ClientState.LocalPlayer.Position.X, ClientState.LocalPlayer.Position.Y, ClientState.LocalPlayer.Position.Z), new RcVec3f(a.Position.X, a.Position.Y, a.Position.Z));
-                                        while (_runner.NaviPts.Count != 0)
-                                            await Task.Delay(5);
-                                        PluginLog.Info("Done Moving - Interacting with Obj");
-                                        var cnt = 0;
-                                        while (cnt++ < 4)
-                                        {
-                                            InteractWithObject(a);
-                                            await Task.Delay(1000);
-                                        }
-                                        PluginLog.Info("Done Interacting with Obj - Selecting Yes");
-                                        await SelectYesNo("YES");
-                                        PluginLog.Info("Done Selecting Yes");
-                                        _runner.Precision = .1f;
-                                    }
-                                    break;
-                                default: break;
-                            }
-                            break;  
-                        default: break;
-                    }
-                    continue;
-                }
-                else if (item.Split('|')[0].Equals("ExitDuty"))
-                {
-                    this.exitDuty.Invoke((char)0);
-                    continue;
-                }
-
-                var playerPos = new RcVec3f(ClientState.LocalPlayer.Position.X, ClientState.LocalPlayer.Position.Y, ClientState.LocalPlayer.Position.Z);
-                if (!targetPosSet)
-                    targetPos = new RcVec3f(float.Parse(item.Split(',')[0]), float.Parse(item.Split(',')[1]), float.Parse(item.Split(',')[2]));
-                Navigate(playerPos, targetPos);
-                //wait for xivrunner queue to be empty
-                while (_runner.NaviPts.Count != 0)
-                {
-                    //PluginLog.Information("Waiting for navigation");w
-                    if (Condition[ConditionFlag.InCombat] && stopForCombat)
-                    {
-                        PluginLog.Information("Waiting for InCombat");
-                        _runner.Enable = false;
-                        _runnerIC.Enable = true;
-                        var playerPos2 = ClientState.LocalPlayer.Position;
-                        while (Condition[ConditionFlag.InCombat])
-                        {
-                            if (_runnerIC.NaviPts.Count == 0)
-                                _runnerIC.NaviPts.Enqueue(playerPos2);
-                            await Task.Delay(500);
-                        }
-                        _runnerIC.NaviPts.Clear();
-                        _runnerIC.Enable = false;
-                        _runner.Enable = true;
-                        //PluginLog.Information("Waiting for InCombat");
-
-                    }
-                    await Task.Delay(5);
-                }
-                if (boss)
-                {
-                    await Task.Delay(5000);
-                    //get our BossObject
-                    var bossObject = GetBossObject();
-                    if (bossObject != null)
-                    {
-                        PluginLog.Info("Boss: " + bossObject.Name);
-                    }
-                    else
-                    {
-                        PluginLog.Info("Boss: We were unable to determine our Boss Object");
-                    }
-                    ChatCommand.ExecuteCommand("/vbm aioff");
-                    //switch our class type
-                    switch (ClientState.LocalPlayer.ClassJob.GameData.Role)
-                    {
-                        //tank - follow healer
-                        case 1:
-                            //get our healer object
-                            followTargetObject = GetTrustHealerMemberObject();
-                            break;
-                        //everyone else - follow tank
-                        default:
-                            //get our tank object
-                            followTargetObject = GetTrustTankMemberObject();
-                            break;
-                    }
-                    if (followTargetObject != null)
-                    {
-                        followTarget = followTargetObject.Name.ToString();
-                        follow = true;
-                        followDistance = 0;
-                    }
-                    if (bossObject != null)
-                    {
-                        PluginLog.Info("Boss: waiting while InCombat and while !" + bossObject.Name + ".IsDead");
-                        while (Condition[ConditionFlag.InCombat] && !bossObject.IsDead)
-                        {
-                            await Task.Delay(5);
-                        }
-                    }
-                    else
-                    {
-                        PluginLog.Info("Boss: We were unable to determine our Boss Object waiting while InCombat");
-                        while (Condition[ConditionFlag.InCombat])
-                        {
-                            await Task.Delay(5);
-                        }
-                    }
-                    follow = false;
-                    boss = false;
-                    ChatCommand.ExecuteCommand("/vbm aion");
-                    ChatCommand.ExecuteCommand("/vbm floff");
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            PluginLog.Error(ex.ToString());
-        }
-    }
-    private static async Task<bool> SelectYesNo(string YesorNo)
-    {
-        try
-        {
-            nint addon;
-            int cnt = 0;
-            while ((addon = GameGui.GetAddonByName("SelectYesno", 1)) == 0 && (cnt++ < 500))
-                await Task.Delay(10);
-            if (addon == 0)
-                return false;
-            await Task.Delay(25);
-
-            if (YesorNo.Equals(""))
-                ClickSelectYesNo.Using(addon).Yes();
-            else
-            {
-                if (YesorNo.Equals("YES"))
-                {
-                    ClickSelectYesNo.Using(addon).Yes();
-                }
-                else if (YesorNo.Equals("NO"))
-                {
-                    ClickSelectYesNo.Using(addon).No();
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            PluginLog.Error(ex.ToString());
-            return false;
-        }
-        await Task.Delay(50);
-        return true;
-    }
-    private BattleChara GetBossObject()
-    {
-        var objs = GetObjectInRadius(ObjectTable, 30);
-        var battleCharaObjs = objs.OfType<BattleChara>();
-        BattleChara bossObject = default;
-        foreach (var obj in battleCharaObjs)
-        {
-            PluginLog.Info("Checking: " + obj.Name.ToString());
-            if (IsBossFromIcon(obj))
-                bossObject = obj;
-        }
-
-        return bossObject;
-    }
-    private GameObject GetGroupMemberObjectByRole(int role)
-    {
-        return PartyList.Where(s => s.ClassJob.GameData.Role == role).First().GameObject;
-    }
-    private GameObject GetTrustTankMemberObject()
-    {
-        try
-        {
-            return BuddyList.Where(s => s.GameObject.Name.ToString().Contains("Marauder") || s.GameObject.Name.ToString().Contains("") || s.GameObject.Name.ToString().Contains("Ysayle") || s.GameObject.Name.ToString().Contains("Temple Knight") || s.GameObject.Name.ToString().Contains("Haurchefant") || s.GameObject.Name.ToString().Contains("Pero Roggo") || s.GameObject.Name.ToString().Contains("Aymeric") || s.GameObject.Name.ToString().Contains("House Fortemps Knight") || s.GameObject.Name.ToString().Contains("Carvallain") || s.GameObject.Name.ToString().Contains("Gosetsu") || s.GameObject.Name.ToString().Contains("Hien") || s.GameObject.Name.ToString().Contains("Resistance Fighter") || s.GameObject.Name.ToString().Contains("Arenvald") || s.GameObject.Name.ToString().Contains("Emet-Selch") || s.GameObject.Name.ToString().Contains("Venat") || s.GameObject.Name.ToString().Contains("Varshahn") || s.GameObject.Name.ToString().Contains("Thancred") || s.GameObject.Name.ToString().Contains("G'raha Tia") || s.GameObject.Name.ToString().Contains("Crystal Exarch")).First().GameObject;
-        }
-        catch (Exception ex) 
-        {
-            return null;
-            //
-        }
-    }
-    private GameObject GetTrustHealerMemberObject()
-    {
-        try
-        {
-            return BuddyList.Where(s => s.GameObject.Name.ToString().Contains("Conjurer") || s.GameObject.Name.ToString().Contains("Temple Chirurgeon") || s.GameObject.Name.ToString().Contains("Mol Youth") || s.GameObject.Name.ToString().Contains("Doman Shaman") || s.GameObject.Name.ToString().Contains("Venat") || s.GameObject.Name.ToString().Contains("Alphinaud") || s.GameObject.Name.ToString().Contains("Urianger") || s.GameObject.Name.ToString().Contains("Y'shtola") || s.GameObject.Name.ToString().Contains("Crystal Exarch") || s.GameObject.Name.ToString().Contains("G'raha Tia") ).First().GameObject;
-        }
-        catch (Exception ex)
-        {
-            return null;
-            //
-        }
-    }
-    public unsafe void InteractWithObject(GameObject baseObj)
-    {
-        try
-        {            
-            var convObj = (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)baseObj.Address;
-            TargetSystem.Instance()->InteractWithObject(convObj, true);
-        }
-        catch (Exception ex)
-        {
-            PluginLog.Error(ex.ToString());
-        }
-    }
+    
     public unsafe void Test()
     {
         //Just a Test function
@@ -1058,8 +630,8 @@ public class MBT : IDalamudPlugin
             //var player = ClientState.LocalPlayer;
             //SetPos.SetPosPos(player.Position + new System.Numerics.Vector3(0, 1,
             //0)) ;
-            //Dalamud.Logging.PluginLog.Log(DalamudAPI.PartyList[0].Name.ToString());
-            //DalamudAPI.TargetManager.SetTarget(gameObject);
+            //Dalamud.Logging.Log.Log(DalamudAPI.PartyList[0].Name.ToString());
+            //DalamudAPI.Targets.SetTarget(gameObject);
             //Set the Games MovementMove 0=Standard, 1=Legacy
             //DalamudAPI.GameConfig.UiControl.Set("MoveMode", 1);
             /*if (DalamudAPI.GameConfig.UiControl.GetUInt("MoveMode") == 0)
@@ -1069,11 +641,11 @@ public class MBT : IDalamudPlugin
             //ClickSelectYesNo.Using(default).Yes();
             *if (TryGetAddonByName<AtkUnitBase>("SelectYesno", out var addon))
             {
-                PluginLog.Information("got addon");
+                Log.Information("got addon");
             }
             else
             {
-                PluginLog.Information("no addon found");
+                Log.Information("no addon found");
             }
             */
             //var addon = GameGui.GetAddonByName("SelectYesno", 1);
@@ -1081,79 +653,85 @@ public class MBT : IDalamudPlugin
             // addonPTR->SendClick(addon, EventType.CHANGE, 0, ((AddonSelectYesno*)addon)->YesButton->AtkComponentBase.OwnerNode);
             //ClickSelectYesNo.Using(addon).Yes();
             //addon.
-            // PluginLog.Information(addon->AtkValues[0].ToString());
+            // Log.Information(addon->AtkValues[0].ToString());
             //textTest = addon->AtkValues[0].ToString();
             //InteractWithObject("Red Coral Formation");
             //var go = GetGroupMemberObjectByRole(4);
-            //PluginLog.Info("Our Healer is: " + go.Name.ToString());
+            //Log.Info("Our Healer is: " + go.Name.ToString());
             //go = GetGroupMemberObjectByRole(1);
-            //PluginLog.Info("Our Tank is: " + go.Name.ToString());
-            //PluginLog.Info("Boss: " + IsBossFromIcon((BattleChara)TargetManager.Target));;
+            //Log.Info("Our Tank is: " + go.Name.ToString());
+            //Log.Info("Boss: " + IsBossFromIcon((BattleChara)Targets.Target));;
 
-            /*var objs = GetObjectInRadius(ObjectTable, 30);
+            /*var objs = GetObjectInRadius(Objects, 30);
             foreach (var obj in objs) 
             {
-                PluginLog.Info("Name: " + obj.Name.ToString() + " Distance: " + DistanceToPlayer(obj));            
+                Log.Info("Name: " + obj.Name.ToString() + " Distance: " + DistanceToPlayer(obj));            
             }*/
-            /*var objs = GetObjectInRadius(ObjectTable, 30);
+            /*var objs = GetObjectInRadius(Objects, 30);
             var battleCharaObjs = objs.OfType<BattleChara>();
             GameObject bossObject = default;
             foreach (var obj in battleCharaObjs)
             {
-                PluginLog.Info("Checking: " + obj.Name.ToString());
+                Log.Info("Checking: " + obj.Name.ToString());
                 if (IsBossFromIcon(obj))
                     bossObject = obj;
             }
             if (bossObject)
-                PluginLog.Info("Boss: " + bossObject.Name.ToString());*/
-            //PluginLog.Info(DistanceToPlayer(TargetManager.Target).ToString());
+                Log.Info("Boss: " + bossObject.Name.ToString());*/
+            //Log.Info(DistanceToPlayer(Targets.Target).ToString());
             /*var v3o = new RcVec3f(-113.888f, 150, 210.794f);
              var path = meshesDirectory + "/" + ClientState.TerritoryType.ToString() + ".navmesh";
              var fileStream = File.Open(path, FileMode.Open);
              var nmd = new NavMeshDetour();
              var point = nmd.FindNearestPolyPoint(v3o, new RcVec3f(0, 200, 0), fileStream);
-             PluginLog.Info(point.ToString());
+             Log.Info(point.ToString());
              Navigate(new RcVec3f(ClientState.LocalPlayer.Position.X, ClientState.LocalPlayer.Position.Y, ClientState.LocalPlayer.Position.Z), point);*/
-            var i = ObjectTable.OrderBy(o => DistanceToPlayer(o)).Where(p => p.Name.ToString().ToUpper().Equals("MINERAL DEPOSIT"));
+            /*var i = Objects.OrderBy(o => DistanceToPlayer(o)).Where(p => p.Name.ToString().ToUpper().Equals("MINERAL DEPOSIT"));
 
             foreach (var o in i) 
             { 
-                PluginLog.Info(o.Name.ToString() + " - " + DistanceToPlayer(o).ToString() + " IsTargetable" + o.IsTargetable);
+                Log.Info(o.Name.ToString() + " - " + DistanceToPlayer(o).ToString() + " IsTargetable" + o.IsTargetable);
+            }*/
+            if (ECommons.Reflection.DalamudReflector.TryGetDalamudPlugin("vnavmesh", out var _))
+            {
+                PluginInterface.GetIpcSubscriber<bool, object>("vnavmesh.SetMovementAllowed").InvokeAction(true);
+
             }
-         }
+            /*
+            //This clicks the Item in the Gathering Window by Index 
+            var addon = (AddonGathering*)GameGui.GetAddonByName("Gathering", 1);
+            if (addon != null)
+            {
+                var ids = new List<uint>()
+                {
+                    addon->GatheredItemId1,
+                    addon->GatheredItemId2,
+                    addon->GatheredItemId3,
+                    addon->GatheredItemId4,
+                    addon->GatheredItemId5,
+                    addon->GatheredItemId6,
+                    addon->GatheredItemId7,
+                    addon->GatheredItemId8
+                };
+                ids.ForEach(p => Log.Info(p.ToString()));
+            }
+            //var addon2 = (AtkUnitBase*)GameGui.GetAddonByName("Gathering");
+            var receiveEventAddress = new nint(addon->AtkUnitBase.AtkEventListener.vfunc[2]);
+            var eventDelegate = Marshal.GetDelegateForFunctionPointer<ReceiveEventDelegate>(receiveEventAddress)!;
+
+            var target = AtkStage.GetSingleton();
+            var eventData = EventData.ForNormalTarget(target, &addon->AtkUnitBase);
+            var inputData = InputData.Empty();
+
+            eventDelegate.Invoke(&addon->AtkUnitBase.AtkEventListener, ClickLib.Enums.EventType.CHANGE, (uint)2, eventData.Data, inputData.Data);*/
+
+            var addon = GameGui.GetAddonByName("SelectYesno", 1);
+            var add = (AddonSelectYesno*)addon;
+        }
         catch (Exception e)
         {
-            PluginLog.Error(e.ToString());
+            Log.Error(e.ToString());
             //throw;
         }
     }
-    private GameObject FindClosestObjectByName(string name)
-    {
-        return ObjectTable.OrderBy(o => DistanceToPlayer(o)).Where(p => p.Name.Equals(name)).FirstOrDefault();
-    }
-    public static bool IsBossFromIcon(BattleChara obj)
-    {
-        if (obj == null) return false;
-
-        //Icon
-        if (GetObjectNPC(obj)?.Rank is 1 or 2 /*or 4*/ or 6) return true;
-
-        return false;
-    }
-
-    public enum OID : uint
-    {
-        Blue = 0x1E8554,
-        Red = 0x1E8A8C,
-        Green = 0x1E8A8D,
-    }
-    private void Condition_OnConditionChange(ConditionFlag flag, bool value)
-    {
-        PluginLog.Info(flag.ToString());
-        if (flag == ConditionFlag.InCombat)
-            _runner.Enable = false;
-        else
-            _runner.Enable = true;
-    }
-
 }

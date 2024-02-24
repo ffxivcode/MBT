@@ -1,11 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.IO;
+using System.Diagnostics;
 using System.Numerics;
-using System.Text.Json;
+using AutoDuty.Managers;
+using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using ImGuiNET;
-using static MBT.DalamudAPI;
 
 namespace MBT;
 
@@ -13,25 +12,7 @@ public class MainWindow : Window, IDisposable
 {
     private readonly MBT Plugin;
     private int currentTab = 1;
-    private string dropdownSelected = "";
-    string input = "";
-    string inputTextName = "";
-    int inputIW = 200;
-    bool showAddActionUI = false;
-    bool ddisboss = false;
-    List<string> items = new List<string>
-        {
-            "Wait|how long?",
-            "WaitFor|for?",
-            "Boss|move to leash location and hit",
-            "Interactable|interact with?",
-            "SelectYesno|yes or no?",
-            "MoveToObject|Object Name?",
-            "ExitDuty|*NoAddUI*",
-            "TreasureCoffer|*NoAddUI*",
-            "DutySpecificCode|step #?"
-        };
-
+    
     public MainWindow(MBT plugin) : base(
         "Multi Boxer Toolkit: /mbt", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoResize)
     {
@@ -46,240 +27,95 @@ public class MainWindow : Window, IDisposable
 
     public void Dispose() { }
 
-    private void AddAction(string action)
-    {
-        if (action.Contains("Boss"))
-        {
-            Plugin.ListBoxPOSText.Add("Boss|" + ClientState.LocalPlayer.Position.ToString().Replace('<', ' ').Replace('>', ' ').Trim());
-        }
-        else
-            Plugin.ListBoxPOSText.Add(action + "|" + input);
-        input = "";
-    }
-
     public override void Draw()
     {
-        if (ImGui.Button("Main")) currentTab = 1;
-        ImGui.SameLine(0, 5);
-        if (ImGui.Button("Build Path")) currentTab = 2;
-        ImGui.SameLine(0, 5);
-        if (ImGui.Button("Movement Hacks")) currentTab = 3;
-        ImGui.SameLine(0, 5);
-        if (ImGui.Button("Follow")) currentTab = 4;
-        ImGui.Separator();
-        if (currentTab == 4)
+        if (ImGui.BeginTabBar("MainTabBar", ImGuiTabBarFlags.None))
         {
-            ImGui.Text("Follow:");
-            ImGui.SameLine(0, 5);
-            ImGui.TextColored(Plugin.textFollow1Color, Plugin.textFollow1);
-            ImGui.SameLine(0, 5);
-            ImGui.TextColored(Plugin.textFollow2Color, Plugin.textFollow2);
-            ImGui.SameLine(0, 5);
-            ImGui.TextColored(Plugin.textFollow3Color, Plugin.textFollow3);
-            ImGui.Checkbox("Follow Enabed", ref Plugin.follow);
-            ImGui.InputInt("Follow Distance", ref Plugin.followDistance);
-            ImGui.InputTextWithHint("##FollowTarget", "Follow Target", ref Plugin.followTarget, 20);
-            ImGui.SameLine(0, 5);
-            if (ImGui.Button("Add Current Target"))
-                Plugin.SetTarget();
-        }
-        else if (currentTab == 3)
-        {
-            ImGui.Text("Teleport (Use at Own Risk):");
-            if (ImGui.Button("+X"))
+            if (ImGui.BeginTabItem("Follow"))
             {
-                Plugin.teleportX(1);
-            }
-            ImGui.SameLine(0, 5);
-            if (ImGui.Button("-X"))
-            {
-                Plugin.teleportX(-1);
-            }
-            if (ImGui.Button("+Y"))
-            {
-                Plugin.teleportY(1);
-            }
-            ImGui.SameLine(0, 5);
-            if (ImGui.Button("-Y"))
-            {
-                Plugin.teleportY(-1);
-            }
-            if (ImGui.Button("+Z"))
-            {
-                Plugin.teleportZ(1);
-            }
-            ImGui.SameLine(0, 5);
-            if (ImGui.Button("-Z"))
-            {
-                Plugin.teleportZ(-1);
-            }
-            if (ImGui.Button("Target"))
-            {
-                Plugin.TTarget();
-            }
-            ImGui.InputTextWithHint("##Teleport", "Teleport", ref Plugin.teleportPOS, 20);
-            ImGui.SameLine(0, 5);
-            if (ImGui.Button("Add Teleport POS"))
-            {
-                Plugin.AddPos();
-            }
-            if (ImGui.Button("Teleport to POS"))
-            {
-                Plugin.TeleportPOS(new Vector3(float.Parse(Plugin.teleportPOS.Split(',')[0]), float.Parse(Plugin.teleportPOS.Split(',')[1]), float.Parse(Plugin.teleportPOS.Split(',')[2])));
-            }
-            if (ImGui.Button("Teleport to Mouse"))
-            {
-                SetPos.SetPosToMouse();
-            }
-            ImGui.Spacing();
-            ImGui.Text("Speed:");
-            ImGui.InputText("Speed Base", ref Plugin.speedBase, 20);
-            if (ImGui.Button("Set Speed"))
-            {
-                Plugin.SetSpeed();
-            }
-        }
-        else if (currentTab == 2)
-        {
-            ImGui.Text("Build Path:");
-            if (ImGui.Button("Add POS"))
-            {
-                Plugin.ListBoxPOSText.Add(ClientState.LocalPlayer.Position.ToString().Replace('<', ' ').Replace('>', ' ').Trim());
-            }
-            ImGui.SameLine(0, 5);
-            if (ImGui.Button("Add Action"))
-                ImGui.OpenPopup("AddActionPopup");
-
-            if (ImGui.BeginPopup("AddActionPopup"))
-            {
-                foreach (var item in items)
+                if (!IPCManager.VNavmesh_IsEnabled)
+                    ImGui.TextColored(new Vector4(0, 255, 0, 1), "This feature requires VNavmesh to be installed and Enabled");
+                if (IPCManager.VNavmesh_NavmeshIsNull && IPCManager.VNavmesh_TaskProgress > -1)
                 {
-                    if (ImGui.Selectable(item.Split('|')[0]))
-                    {
-                        dropdownSelected = item;
-                        
-                        if (item.Split('|')[1].Equals("*NoAddUI*")) 
-                        {
-                            Plugin.ListBoxPOSText.Add(item.Split('|')[0]);
-                        }
-                        else if (item.Split('|')[0].Equals("Boss"))
-                        {
-                            ddisboss = true;
-                            input = ClientState.LocalPlayer.Position.ToString().Replace('<', ' ').Replace('>', ' ').Trim();
-                            inputIW = 400;
-                            showAddActionUI = true;
-                        }
-                        else
-                        {
-                            ddisboss = false;
-                            inputIW = 400;
-                            input = "";
-                            showAddActionUI = true;
-                        }
-                        inputTextName = item.Split('|')[1];
-                    }
+                    ImGui.TextColored(new Vector4(0, 255, 0, 1), "Navmesh Loading:");
+                    ImGui.ProgressBar(IPCManager.VNavmesh_TaskProgress, new(200, 0));
                 }
-                ImGui.EndPopup();
-            }
-            ImGui.SameLine(0, 5);
-            if (ImGui.Button("Clear Path"))
-            {
-                Plugin.ListBoxPOSText.Clear();
-            }
-            ImGui.SameLine(0, 5);
-            if (ImGui.Button("Save Path"))
-            {
-                try
+                using (var d = ImRaii.Disabled(IPCManager.VNavmesh_NavmeshIsNull || !IPCManager.VNavmesh_IsEnabled))
                 {
-                    if (File.Exists(Plugin.pathsDirectory + "/" + ClientState.TerritoryType.ToString() + ".json"))
-                    {
-                        File.Delete(Plugin.pathsDirectory + "/" + ClientState.TerritoryType.ToString() + ".json");
-                    }
-                    string json = JsonSerializer.Serialize(Plugin.ListBoxPOSText);
-                    File.WriteAllText(Plugin.pathsDirectory + "/" + ClientState.TerritoryType.ToString() + ".json", json);
+                    ImGui.Text("Follow:");
+                    ImGui.SameLine(0, 5);
+                    ImGui.TextColored(Plugin.textFollow1Color, Plugin.textFollow1);
+                    ImGui.SameLine(0, 5);
+                    ImGui.TextColored(Plugin.textFollow2Color, Plugin.textFollow2);
+                    ImGui.SameLine(0, 5);
+                    ImGui.TextColored(Plugin.textFollow3Color, Plugin.textFollow3);
+                    ImGui.Checkbox("Follow Enabed", ref Plugin.follow);
+                    ImGui.InputInt("Follow Distance", ref Plugin.followDistance);
+                    ImGui.InputTextWithHint("##FollowTarget", "Follow Target", ref Plugin.followTarget, 20);
+                    ImGui.SameLine(0, 5);
+                    if (ImGui.Button("Add Current Target"))
+                        Plugin.SetTarget();
                 }
-                catch (Exception e)
-                {
-                    PluginLog.Error(e.ToString());
-                    //throw;
-                }
+                ImGui.EndTabItem();
             }
-            ImGui.SameLine(0, 5);
-            if (ImGui.Button("Load Path"))
+            if (ImGui.BeginTabItem("Movement Hacks"))
             {
-                try
+                ImGui.Text("Teleport (Use at Own Risk):");
+                if (ImGui.Button("+X"))
                 {
-                    if (File.Exists(Plugin.pathsDirectory + "/" + ClientState.TerritoryType.ToString() + ".json"))
-                    {
-                        Plugin.ListBoxPOSText.Clear();
-                        string json = File.ReadAllText(Plugin.pathsDirectory + "/" + ClientState.TerritoryType.ToString() + ".json");
-                        Plugin.ListBoxPOSText = JsonSerializer.Deserialize<List<string>>(json);
-                    }
+                    Plugin.teleportX(1);
                 }
-                catch (Exception e)
-                {
-                    PluginLog.Error(e.ToString());
-                    //throw;
-                }
-            }
-            if (showAddActionUI)
-            {
-                ImGui.PushItemWidth(inputIW);
-                if (ddisboss)
-                    input = ClientState.LocalPlayer.Position.ToString().Replace('<', ' ').Replace('>', ' ').Trim();
-                ImGui.InputText(inputTextName, ref input, 50);
                 ImGui.SameLine(0, 5);
-                if (ImGui.Button("Add"))
+                if (ImGui.Button("-X"))
                 {
-                    AddAction(dropdownSelected.Split('|')[0]);
-                    showAddActionUI = false;
+                    Plugin.teleportX(-1);
                 }
-            }
-            if (!ImGui.BeginListBox("##List", new Vector2(-1, -1))) return;
-            foreach (var item in Plugin.ListBoxPOSText)
-            {
-                ImGui.Selectable(item, ImGui.IsItemClicked(ImGuiMouseButton.Right) || ImGui.IsItemClicked(ImGuiMouseButton.Left));
-
-                if (ImGui.IsItemHovered() && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+                if (ImGui.Button("+Y"))
                 {
-                    // Do stuff on Selectable() double click.
-                    if (item.Split('|')[0].Equals("Wait") || item.Split('|')[0].Equals("Interactable") || item.Split('|')[0].Equals("Boss") || item.Split('|')[0].Equals("SelectYesno") || item.Split('|')[0].Equals("MoveToObject") || item.Split('|')[0].Equals("WaitFor"))
-                    {
-                        //do nothing
-                    }
-                    else
-                        Plugin.TeleportPOS(new Vector3(float.Parse(item.Split(',')[0]), float.Parse(item.Split(',')[1]), float.Parse(item.Split(',')[2])));
+                    Plugin.teleportY(1);
                 }
-                if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
-                    Plugin.ListBoxPOSText.Remove(item);
-                else if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
+                ImGui.SameLine(0, 5);
+                if (ImGui.Button("-Y"))
                 {
-                    //Add a listbox that when this is selected it puts this item in the list box and allows direct modification of items
+                    Plugin.teleportY(-1);
                 }
+                if (ImGui.Button("+Z"))
+                {
+                    Plugin.teleportZ(1);
+                }
+                ImGui.SameLine(0, 5);
+                if (ImGui.Button("-Z"))
+                {
+                    Plugin.teleportZ(-1);
+                }
+                if (ImGui.Button("Target"))
+                {
+                    Plugin.TTarget();
+                }
+                ImGui.InputTextWithHint("##Teleport", "Teleport", ref Plugin.teleportPOS, 20);
+                ImGui.SameLine(0, 5);
+                if (ImGui.Button("Add Teleport POS"))
+                {
+                    Plugin.AddPos();
+                }
+                if (ImGui.Button("Teleport to POS"))
+                {
+                    Plugin.TeleportPOS(new Vector3(float.Parse(Plugin.teleportPOS.Split(',')[0]), float.Parse(Plugin.teleportPOS.Split(',')[1]), float.Parse(Plugin.teleportPOS.Split(',')[2])));
+                }
+                if (ImGui.Button("Teleport to Mouse"))
+                {
+                    SetPos.SetPosToMouse();
+                }
+                ImGui.Spacing();
+                ImGui.Text("Speed:");
+                ImGui.InputText("Speed Base", ref Plugin.speedBase, 20);
+                if (ImGui.Button("Set Speed"))
+                {
+                    Plugin.SetSpeed();
+                }
+                ImGui.EndTabItem();
             }
-            ImGui.EndListBox();
-        }
-        else if (currentTab == 1)
-        {
-            ImGui.Text("Main:");
-            ImGui.Spacing();
-            ImGui.Text("Current Territory: " + ClientState.TerritoryType);
-            ImGui.Text("Mesh Exists: " + File.Exists(Plugin.meshesDirectory + "/" + ClientState.TerritoryType.ToString() + ".navmesh"));
-            ImGui.Text("Path Exists: " + File.Exists(Plugin.pathsDirectory + "/" + ClientState.TerritoryType.ToString() + ".json"));
-            if (ImGui.Button("Navigate Path"))
-            {
-                Plugin.NavigatePath();
-            }
-            ImGui.SameLine(0, 5);
-            if (ImGui.Button("Stop Navigating"))
-            {
-                Plugin.StopNavigating();
-            }
-            if (ImGui.Button("Test"))
-            {
-                Plugin.Test();
-            }
-            //*/
+            ImGui.EndTabBar();
         }
     }
 }

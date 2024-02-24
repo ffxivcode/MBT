@@ -2,6 +2,8 @@
 using System;
 using System.Runtime.InteropServices;
 using FFXIVClientStructs.FFXIV.Common.Math;
+using ECommons.DalamudServices;
+using Dalamud;
 
 namespace MBT
 {
@@ -14,7 +16,7 @@ namespace MBT
             get
             {
                 //#if CNVersion
-                if (DalamudAPI.SigScanner.TryScanText("E8 ?? ?? ?? ?? 44 89 A3 ?? ?? ?? ?? 66 C7 83", out var ptr))
+                if (Svc.SigScanner.TryScanText("E8 ?? ?? ?? ?? 44 89 A3 ?? ?? ?? ?? 66 C7 83", out var ptr))
                     return ptr;
                 // #else
                 // if (Service.SigScanner.TryScanText("E8 ?? ?? ?? ?? 44 89 A3 ?? ?? ?? ?? 66 C7 83", out var ptr))
@@ -28,17 +30,17 @@ namespace MBT
         {
             if (SetPosFunPtr == IntPtr.Zero)
                 return;
-            if (DalamudAPI.ClientState.LocalPlayer == null)
+            if (Svc.ClientState.LocalPlayer == null)
                 return;
             ((delegate*<long, float, float, float, long>)SetPosFunPtr)(
-                (long)DalamudAPI.ClientState.LocalPlayer.Address, x, z, y);
+                (long)Svc.ClientState.LocalPlayer.Address, x, z, y);
         }
 
         public static void SetPosv2(float x, float y)
         {
-            if (DalamudAPI.ClientState.LocalPlayer == null)
+            if (Svc.ClientState.LocalPlayer == null)
                 return;
-            float z = DalamudAPI.ClientState.LocalPlayer.Position.Y;
+            float z = Svc.ClientState.LocalPlayer.Position.Y;
             SetPosv3(x, z, y);
         }
 
@@ -62,29 +64,29 @@ namespace MBT
         //}
         public static void SetPosToMouse()
         {
-            if (DalamudAPI.ClientState.LocalPlayer == null)
+            if (Svc.ClientState.LocalPlayer == null)
                 return;
             var mousePos = ImGui.GetIO().MousePos;
-            DalamudAPI.GameGui.ScreenToWorld(mousePos, out var pos);
+            Svc.GameGui.ScreenToWorld(mousePos, out var pos);
             SetPosPos(pos);
         }
 
         public static void MoveSpeed(float speedBase)
         {
-            DalamudAPI.SigScanner.TryScanText("f3 ?? ?? ?? ?? ?? ?? ?? e8 ?? ?? ?? ?? 48 ?? ?? ?? ?? ?? ?? 0f ?? ?? e8 ?? ?? ?? ?? f3 ?? ?? ?? ?? ?? ?? ?? f3 ?? ?? ?? ?? ?? ?? ?? f3 ?? ?? ?? f3", out var address);
+            Svc.SigScanner.TryScanText("f3 ?? ?? ?? ?? ?? ?? ?? e8 ?? ?? ?? ?? 48 ?? ?? ?? ?? ?? ?? 0f ?? ?? e8 ?? ?? ?? ?? f3 ?? ?? ?? ?? ?? ?? ?? f3 ?? ?? ?? ?? ?? ?? ?? f3 ?? ?? ?? f3", out var address);
             address = address + 4 + Marshal.ReadInt32(address + 4) + 4;
             SafeMemory.Write<float>(address + 0x14, speedBase);
             SetMoveControlData(speedBase);
         }
         private static void SetMoveControlData(float speed)
         {
-            SafeMemory.Write<float>(((delegate* unmanaged[Stdcall]<byte, IntPtr>)DalamudAPI.SigScanner.ScanText("E8 ?? ?? ?? ?? 48 ?? ?? 74 ?? 83 ?? ?? 75 ?? 0F ?? ?? ?? 66"))(1) + 8, speed);
+            SafeMemory.Write<float>(((delegate* unmanaged[Stdcall]<byte, IntPtr>)Svc.SigScanner.ScanText("E8 ?? ?? ?? ?? 48 ?? ?? 74 ?? 83 ?? ?? 75 ?? 0F ?? ?? ?? 66"))(1) + 8, speed);
         }
 
         public static string MousePos()
         {
             Vector2 mousePos = ImGui.GetIO().MousePos;
-            DalamudAPI.GameGui.ScreenToWorld(mousePos, out var pos);
+            Svc.GameGui.ScreenToWorld(mousePos, out var pos);
             Vector3 pos2 = pos;
             return pos2.ToString();
         }

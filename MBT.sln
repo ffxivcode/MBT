@@ -5,6 +5,8 @@ VisualStudioVersion = 17.5.33516.290
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MBT", "MBT\MBT.csproj", "{13C812E9-0D42-4B95-8646-40EEBF30636F}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ECommons", "ECommons\ECommons\ECommons.csproj", "{1A7A4A10-C16C-45EE-9271-5A212CF04F5D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -15,6 +17,10 @@ Global
 		{13C812E9-0D42-4B95-8646-40EEBF30636F}.Debug|x64.Build.0 = Debug|x64
 		{13C812E9-0D42-4B95-8646-40EEBF30636F}.Release|x64.ActiveCfg = Release|x64
 		{13C812E9-0D42-4B95-8646-40EEBF30636F}.Release|x64.Build.0 = Release|x64
+		{1A7A4A10-C16C-45EE-9271-5A212CF04F5D}.Debug|x64.ActiveCfg = Debug|x64
+		{1A7A4A10-C16C-45EE-9271-5A212CF04F5D}.Debug|x64.Build.0 = Debug|x64
+		{1A7A4A10-C16C-45EE-9271-5A212CF04F5D}.Release|x64.ActiveCfg = Release|x64
+		{1A7A4A10-C16C-45EE-9271-5A212CF04F5D}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
