@@ -32,14 +32,14 @@ public class MainWindow : Window, IDisposable
         {
             if (ImGui.BeginTabItem("Follow"))
             {
-                if (!IPCManager.VNavmesh_IsEnabled)
+                if (!IPCManager.Vnavmesh_IsEnabled)
                     ImGui.TextColored(new Vector4(0, 255, 0, 1), "This feature requires VNavmesh to be installed and Enabled");
-                if (IPCManager.VNavmesh_NavmeshIsNull && IPCManager.VNavmesh_TaskProgress > -1)
+                if (!IPCManager.Vnavmesh_Nav_IsReady && IPCManager.Vnavmesh_Nav_BuildProgress > -1)
                 {
                     ImGui.TextColored(new Vector4(0, 255, 0, 1), "Navmesh Loading:");
-                    ImGui.ProgressBar(IPCManager.VNavmesh_TaskProgress, new(200, 0));
+                    ImGui.ProgressBar(IPCManager.Vnavmesh_Nav_BuildProgress, new(200, 0));
                 }
-                using (var d = ImRaii.Disabled(IPCManager.VNavmesh_NavmeshIsNull || !IPCManager.VNavmesh_IsEnabled))
+                using (var d = ImRaii.Disabled(!IPCManager.Vnavmesh_Nav_IsReady || !IPCManager.Vnavmesh_IsEnabled))
                 {
                     ImGui.Text("Follow:");
                     ImGui.SameLine(0, 5);

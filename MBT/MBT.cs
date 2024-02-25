@@ -244,13 +244,13 @@ public class MBT : IDalamudPlugin
                 switch (messageList[2])
                 {
                     case "*1*":
-                        IPCManager.VNavmesh_MoveTo(new Vector3(pos.X - 10, pos.Y, pos.Z));
+                        IPCManager.Vnavmesh_Path_MoveTo(new Vector3(pos.X - 10, pos.Y, pos.Z));
                         break;
                     case "*2*":
-                        IPCManager.VNavmesh_MoveTo(new Vector3(pos.X + 10, pos.Y, pos.Z + 5));
+                        IPCManager.Vnavmesh_Path_MoveTo(new Vector3(pos.X + 10, pos.Y, pos.Z + 5));
                         break;
                     case "*3*":
-                        IPCManager.VNavmesh_MoveTo(new Vector3(pos.X + 10, pos.Y, pos.Z - 5));
+                        IPCManager.Vnavmesh_Path_MoveTo(new Vector3(pos.X + 10, pos.Y, pos.Z - 5));
                         break;
                 }
             }
@@ -290,7 +290,7 @@ public class MBT : IDalamudPlugin
             followTargetObject = null;
             SetFollowStatus(false, followTarget + " not found", "0", new(255f, 0f, 0f, 1f));
             if (following)
-                IPCManager.VNavmesh_Stop();
+                IPCManager.Vnavmesh_Path_Stop();
             return false;
         }
         else
@@ -308,7 +308,7 @@ public class MBT : IDalamudPlugin
             SetFollowStatus(false, "", "", new(255f, 0f, 0f, 1f));
             if (following && !spreading)
             {
-                IPCManager.VNavmesh_Stop();
+                IPCManager.Vnavmesh_Path_Stop();
                 following = false;
             }
             return;
@@ -351,7 +351,7 @@ public class MBT : IDalamudPlugin
                     SetFollowStatus(false, "", "", new(255f, 0f, 0f, 1f));
                     if (following && !spreading)
                     {
-                        IPCManager.VNavmesh_Stop(); 
+                        IPCManager.Vnavmesh_Path_Stop(); 
                         following = false;
                     }
                     return;
@@ -364,14 +364,14 @@ public class MBT : IDalamudPlugin
                 {
                     following = true;
                     //Move.Move.MoveTo(true, followTargetObject.Position, followDistance);
-                    IPCManager.VNavmesh_SetTolerance(followDistance + .1f);
-                    IPCManager.VNavmesh_MoveTo(followTargetObject.Position);
+                    IPCManager.Vnavmesh_Path_SetTolerance(followDistance + .1f);
+                    IPCManager.Vnavmesh_Path_MoveTo(followTargetObject.Position);
                 }
                 else if (following)
                 {
                     following = false;
                     //Move.Move.MoveTo(false);
-                    IPCManager.VNavmesh_Stop();
+                    IPCManager.Vnavmesh_Path_Stop();
                 }
             }
             catch (Exception e)
@@ -381,7 +381,7 @@ public class MBT : IDalamudPlugin
                 if (following)
                 {
                     following = false;
-                    IPCManager.VNavmesh_Stop();
+                    IPCManager.Vnavmesh_Path_Stop();
                 }
                 //throw;
             }
@@ -392,7 +392,7 @@ public class MBT : IDalamudPlugin
             if (following)
             {
                 following = false;
-                IPCManager.VNavmesh_Stop();
+                IPCManager.Vnavmesh_Path_Stop();
             }
         }
     }
@@ -419,13 +419,13 @@ public class MBT : IDalamudPlugin
         {
             follow = true;
             spreading = false;
-            IPCManager.VNavmesh_Stop();
+            IPCManager.Vnavmesh_Path_Stop();
         }
         else if (args.ToUpper().Contains("FOLLOW OFF") || args.ToUpper().Contains("FOFF"))
         {
             follow = false;
             following = false;
-            IPCManager.VNavmesh_Stop();
+            IPCManager.Vnavmesh_Path_Stop();
         }
         else if (args.ToUpper().Contains("COMETOME "))
         {
@@ -433,8 +433,8 @@ public class MBT : IDalamudPlugin
             if (go != null)
             {
                 StopAllMovement();
-                IPCManager.VNavmesh_SetTolerance(0.1f);
-                IPCManager.VNavmesh_MoveTo(go.Position);
+                IPCManager.Vnavmesh_Path_SetTolerance(0.1f);
+                IPCManager.Vnavmesh_Path_MoveTo(go.Position);
             }
         }
         else if (args.ToUpper().Contains("CTM "))
@@ -443,8 +443,8 @@ public class MBT : IDalamudPlugin
             if (go != null)
             {
                 StopAllMovement();
-                IPCManager.VNavmesh_SetTolerance(0.1f);
-                IPCManager.VNavmesh_MoveTo(go.Position);
+                IPCManager.Vnavmesh_Path_SetTolerance(0.1f);
+                IPCManager.Vnavmesh_Path_MoveTo(go.Position);
             }
         }
         else if (args.ToUpper().Contains("FOLLOWTARGET "))
@@ -465,7 +465,7 @@ public class MBT : IDalamudPlugin
         }
         else if (args.ToUpper().Contains("SPREAD"))
         {
-            IPCManager.VNavmesh_Stop();
+            IPCManager.Vnavmesh_Path_Stop();
             Spread();
         }
         else if (args.ToUpper().Contains("ACCEPTDUTY") || args.ToUpper().Contains("AD"))
@@ -517,7 +517,7 @@ public class MBT : IDalamudPlugin
         follow = false;
         following = false;
         spreading = false;
-        IPCManager.VNavmesh_Stop();
+        IPCManager.Vnavmesh_Path_Stop();
     }
     public unsafe void teleportX(int amount)
     {
@@ -691,11 +691,11 @@ public class MBT : IDalamudPlugin
             { 
                 Log.Info(o.Name.ToString() + " - " + DistanceToPlayer(o).ToString() + " IsTargetable" + o.IsTargetable);
             }*/
-            if (ECommons.Reflection.DalamudReflector.TryGetDalamudPlugin("vnavmesh", out var _))
-            {
-                PluginInterface.GetIpcSubscriber<bool, object>("vnavmesh.SetMovementAllowed").InvokeAction(true);
+            //if (ECommons.Reflection.DalamudReflector.TryGetDalamudPlugin("vnavmesh", out var _))
+            //{
+                //PluginInterface.GetIpcSubscriber<bool, object>("vnavmesh.SetMovementAllowed").InvokeAction(true);
 
-            }
+            //}
             /*
             //This clicks the Item in the Gathering Window by Index 
             var addon = (AddonGathering*)GameGui.GetAddonByName("Gathering", 1);
@@ -724,8 +724,8 @@ public class MBT : IDalamudPlugin
 
             eventDelegate.Invoke(&addon->AtkUnitBase.AtkEventListener, ClickLib.Enums.EventType.CHANGE, (uint)2, eventData.Data, inputData.Data);*/
 
-            var addon = GameGui.GetAddonByName("SelectYesno", 1);
-            var add = (AddonSelectYesno*)addon;
+            //var addon = GameGui.GetAddonByName("SelectYesno", 1);
+            //var add = (AddonSelectYesno*)addon;
         }
         catch (Exception e)
         {
