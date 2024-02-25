@@ -34,7 +34,7 @@ public class MainWindow : Window, IDisposable
             {
                 if (!IPCManager.Vnavmesh_IsEnabled)
                     ImGui.TextColored(new Vector4(0, 255, 0, 1), "This feature requires VNavmesh to be installed and Enabled");
-                if (!IPCManager.Vnavmesh_Nav_IsReady && IPCManager.Vnavmesh_Nav_BuildProgress > -1)
+                else if (!IPCManager.Vnavmesh_Nav_IsReady && IPCManager.Vnavmesh_Nav_BuildProgress > -1)
                 {
                     ImGui.TextColored(new Vector4(0, 255, 0, 1), "Navmesh Loading:");
                     ImGui.ProgressBar(IPCManager.Vnavmesh_Nav_BuildProgress, new(200, 0));

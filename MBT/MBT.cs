@@ -14,7 +14,6 @@ using static ECommons.DalamudServices.Svc;
 using System.IO;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
-using FFXIVClientStructs.FFXIV.Client.UI;
 using ECommons;
 using AutoDuty.Managers;
 namespace MBT;
@@ -44,8 +43,6 @@ public class MBT : IDalamudPlugin
     public List<string> ListBoxPOSText { get; set; } = new List<string>();
     private delegate void ExitDutyDelegate(char timeout);
     private ExitDutyDelegate exitDuty;
-    private GameObject GlobalGameObjectStore;
-    private string GlobalStringStore;
     public string Name => "MBT";
     public static MBT Plugin { get; private set; }
     //public Configuration Configuration { get; init; }
@@ -111,11 +108,10 @@ public class MBT : IDalamudPlugin
             SigScanner.ScanText("40 53 48 83 ec 20 48 8b 05 ?? ?? ?? ?? 0f b6 d9");
 
             this.exitDuty = Marshal.GetDelegateForFunctionPointer<ExitDutyDelegate>(exitDuty);
-
-            OpenMainUI();
         }
         catch (Exception e) { Log.Info($"Failed loading plugin\n{e}"); }
     }
+
     private static unsafe void AcceptDuty()
     {
         Callback((AtkUnitBase*)GameGui.GetAddonByName("ContentsFinderConfirm", 1), 8);
