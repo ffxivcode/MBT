@@ -276,7 +276,7 @@ public class MBT : IDalamudPlugin
         textFollow3Color = color;
     }
 
-    private static GameObject? GetGameObjectFromName(string _objectName) => Objects.First(s => s.Name.ToString() == _objectName);
+    private static GameObject? GetGameObjectFromName(string _objectName) => Objects.FirstOrDefault(s => s.Name.ToString().Equals(_objectName));
 
     public bool GetFollowTargetObject()
     {
