@@ -55,10 +55,10 @@ public class MainWindow : Window, IDisposable
                     if (ImGui.Button("Add Current Target"))
                         Plugin.SetTarget();
                 }
-                if (ImGui.Button("Test"))
+                /*if (ImGui.Button("Test"))
                 {
                     Plugin.Test();
-                }
+                }*/
                 ImGui.EndTabItem();
             }
             if (ImGui.BeginTabItem("Movement Hacks"))
