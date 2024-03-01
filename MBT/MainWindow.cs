@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Net.Mail;
 using System.Numerics;
 using AutoDuty.Managers;
 using Dalamud.Interface.Utility.Raii;
@@ -33,28 +34,40 @@ public class MainWindow : Window, IDisposable
             if (ImGui.BeginTabItem("Follow"))
             {
                 if (!IPCManager.Vnavmesh_IsEnabled)
-                    ImGui.TextColored(new Vector4(0, 255, 0, 1), "This feature requires VNavmesh to be installed and Enabled");
+                {
+                    if (Plugin.UseNavmesh)
+                        Plugin.UseNavmesh = false;
+                }
                 else if (!IPCManager.Vnavmesh_Nav_IsReady && IPCManager.Vnavmesh_Nav_BuildProgress > -1)
                 {
+                    if (Plugin.UseNavmesh)
+                        Plugin.UseNavmesh = false;
                     ImGui.TextColored(new Vector4(0, 255, 0, 1), "Navmesh Loading:");
                     ImGui.ProgressBar(IPCManager.Vnavmesh_Nav_BuildProgress, new(200, 0));
                 }
+
+                ImGui.Text("Follow:");
+                ImGui.SameLine(0, 5);
+                ImGui.TextColored(Plugin.TextFollow1Color, Plugin.TextFollow1);
+                ImGui.SameLine(0, 5);
+                ImGui.TextColored(Plugin.TextFollow2Color, Plugin.TextFollow2);
+                ImGui.SameLine(0, 5);
+                ImGui.TextColored(Plugin.TextFollow3Color, Plugin.TextFollow3);
+                ImGui.Checkbox("Follow Enabed", ref Plugin.Follow);
+                ImGui.SameLine(0, 5);
                 using (var d = ImRaii.Disabled(!IPCManager.Vnavmesh_Nav_IsReady || !IPCManager.Vnavmesh_IsEnabled))
+                    ImGui.Checkbox("Use Navmesh", ref Plugin.UseNavmesh);
+                if (!IPCManager.Vnavmesh_IsEnabled)
                 {
-                    ImGui.Text("Follow:");
-                    ImGui.SameLine(0, 5);
-                    ImGui.TextColored(Plugin.textFollow1Color, Plugin.textFollow1);
-                    ImGui.SameLine(0, 5);
-                    ImGui.TextColored(Plugin.textFollow2Color, Plugin.textFollow2);
-                    ImGui.SameLine(0, 5);
-                    ImGui.TextColored(Plugin.textFollow3Color, Plugin.textFollow3);
-                    ImGui.Checkbox("Follow Enabed", ref Plugin.follow);
-                    ImGui.InputInt("Follow Distance", ref Plugin.followDistance);
-                    ImGui.InputTextWithHint("##FollowTarget", "Follow Target", ref Plugin.followTarget, 20);
-                    ImGui.SameLine(0, 5);
-                    if (ImGui.Button("Add Current Target"))
-                        Plugin.SetTarget();
+                    ImGui.SameLine(0, 2);
+                    ImGui.TextColored(new Vector4(255f, 0, 0, 1f), "(Requires vnavmesh plugin)");
                 }
+                ImGui.InputInt("Follow Distance", ref Plugin.FollowDistance);
+                ImGui.InputTextWithHint("##FollowTarget", "Follow Target", ref Plugin.FollowTarget, 20);
+                ImGui.SameLine(0, 5);
+                if (ImGui.Button("Add Current Target"))
+                    Plugin.SetTarget();
+
                 /*if (ImGui.Button("Test"))
                 {
                     Plugin.Test();
@@ -66,36 +79,36 @@ public class MainWindow : Window, IDisposable
                 ImGui.Text("Teleport (Use at Own Risk):");
                 if (ImGui.Button("+X"))
                 {
-                    Plugin.teleportX(1);
+                    Plugin.TeleportX(1);
                 }
                 ImGui.SameLine(0, 5);
                 if (ImGui.Button("-X"))
                 {
-                    Plugin.teleportX(-1);
+                    Plugin.TeleportX(-1);
                 }
                 if (ImGui.Button("+Y"))
                 {
-                    Plugin.teleportY(1);
+                    Plugin.TeleportY(1);
                 }
                 ImGui.SameLine(0, 5);
                 if (ImGui.Button("-Y"))
                 {
-                    Plugin.teleportY(-1);
+                    Plugin.TeleportY(-1);
                 }
                 if (ImGui.Button("+Z"))
                 {
-                    Plugin.teleportZ(1);
+                    Plugin.TeleportZ(1);
                 }
                 ImGui.SameLine(0, 5);
                 if (ImGui.Button("-Z"))
                 {
-                    Plugin.teleportZ(-1);
+                    Plugin.TeleportZ(-1);
                 }
                 if (ImGui.Button("Target"))
                 {
                     Plugin.TTarget();
                 }
-                ImGui.InputTextWithHint("##Teleport", "Teleport", ref Plugin.teleportPOS, 20);
+                ImGui.InputTextWithHint("##Teleport", "Teleport", ref Plugin.TeleportPosition, 20);
                 ImGui.SameLine(0, 5);
                 if (ImGui.Button("Add Teleport POS"))
                 {
@@ -103,7 +116,7 @@ public class MainWindow : Window, IDisposable
                 }
                 if (ImGui.Button("Teleport to POS"))
                 {
-                    Plugin.TeleportPOS(new Vector3(float.Parse(Plugin.teleportPOS.Split(',')[0]), float.Parse(Plugin.teleportPOS.Split(',')[1]), float.Parse(Plugin.teleportPOS.Split(',')[2])));
+                    Plugin.TeleportPOS(new Vector3(float.Parse(Plugin.TeleportPosition.Split(',')[0]), float.Parse(Plugin.TeleportPosition.Split(',')[1]), float.Parse(Plugin.TeleportPosition.Split(',')[2])));
                 }
                 if (ImGui.Button("Teleport to Mouse"))
                 {
@@ -111,7 +124,7 @@ public class MainWindow : Window, IDisposable
                 }
                 ImGui.Spacing();
                 ImGui.Text("Speed:");
-                ImGui.InputText("Speed Base", ref Plugin.speedBase, 20);
+                ImGui.InputText("Speed Base", ref Plugin.SpeedBase, 20);
                 if (ImGui.Button("Set Speed"))
                 {
                     Plugin.SetSpeed();
