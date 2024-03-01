@@ -16,6 +16,7 @@ using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 using ECommons;
 using AutoDuty.Managers;
+using ECommons.DalamudServices;
 namespace MBT;
 
 /// <summary>
@@ -689,7 +690,7 @@ public class MBT : IDalamudPlugin
             }*/
             //if (ECommons.Reflection.DalamudReflector.TryGetDalamudPlugin("vnavmesh", out var _))
             //{
-                //PluginInterface.GetIpcSubscriber<bool, object>("vnavmesh.SetMovementAllowed").InvokeAction(true);
+            //PluginInterface.GetIpcSubscriber<bool, object>("vnavmesh.SetMovementAllowed").InvokeAction(true);
 
             //}
             /*
@@ -722,6 +723,7 @@ public class MBT : IDalamudPlugin
 
             //var addon = GameGui.GetAddonByName("SelectYesno", 1);
             //var add = (AddonSelectYesno*)addon;
+            Log.Info(Vector3.DistanceSquared(Svc.ClientState.LocalPlayer.Position,new Vector3(44.4254f,-9, 112.402f)).ToString());
         }
         catch (Exception e)
         {
