@@ -7,7 +7,7 @@ namespace MBT;
 [Serializable]
 public class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 7;
+    public int Version { get; set; } = 9;
 
     // the below exist just to make saving less cumbersome
     [NonSerialized]

@@ -95,7 +95,7 @@ internal unsafe class OverrideMovement : IDisposable
     {
         dir = default;
 
-        if (Svc.ClientState.LocalPlayer?.IsCasting ?? true) return false;
+        //if (Svc.ClientState.LocalPlayer?.IsCasting ?? true) return false;
 
         if (Svc.Condition[ConditionFlag.BetweenAreas]
             || Svc.Condition[ConditionFlag.BetweenAreas51]) return false;

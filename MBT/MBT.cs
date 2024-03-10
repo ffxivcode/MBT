@@ -15,8 +15,13 @@ using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 using ECommons;
 using AutoDuty.Managers;
-using ECommons.DalamudServices;
 using MBT.Movement;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using ECommons.Automation;
+using ECommons.DalamudServices;
+using ECommons.Commands;
+using Lumina.Data.Parsing.Scd;
+using FFXIVClientStructs.Havok;
 namespace MBT;
 
 /// <summary>
@@ -52,7 +57,8 @@ public class MBT : IDalamudPlugin
     private readonly OverrideAFK _overrideAFK;
     private delegate void ExitDutyDelegate(char timeout);
     private ExitDutyDelegate _exitDuty;
-    private readonly TinyMessageBus _messagebus = new("DalamudBroadcaster");
+    private readonly TinyMessageBus _messagebusSend = new("DalamudBroadcaster");
+    private readonly TinyMessageBus _messagebusReceive = new("DalamudBroadcaster");
     private readonly TinyMessageBus _messagebusSpread = new("DalamudBroadcasterSpread");
 
     public MBT(
@@ -92,7 +98,7 @@ public class MBT : IDalamudPlugin
             //Attach our OnGameFrameworkUpdate function to our game's Framework Update (called once every frame)
             Framework.Update += OnGameFrameworkUpdate;
 
-            _messagebus.MessageReceived +=
+            _messagebusReceive.MessageReceived +=
                 (sender, e) => MessageReceived(Encoding.UTF8.GetString((byte[])e.Message));
             _messagebusSpread.MessageReceived +=
                 (sender, e) => MessageReceivedSpread(Encoding.UTF8.GetString((byte[])e.Message));
@@ -107,66 +113,9 @@ public class MBT : IDalamudPlugin
 
     private static unsafe void AcceptDuty()
     {
-        Callback((AtkUnitBase*)GameGui.GetAddonByName("ContentsFinderConfirm", 1), 8);
+        Callback.Fire((AtkUnitBase*)GameGui.GetAddonByName("ContentsFinderConfirm", 1), true, 8);
     }
-    private unsafe static void Callback(AtkUnitBase* unitBase, params object[] values)
-    {
-        //if (unitBase == null) throw new Exception("Null UnitBase");
-        if (unitBase == null) return;
-        var atkValues = (AtkValue*)Marshal.AllocHGlobal(values.Length * sizeof(AtkValue));
-        if (atkValues == null) return;
-        try
-        {
-            for (var i = 0; i < values.Length; i++)
-            {
-                var v = values[i];
-                switch (v)
-                {
-                    case uint uintValue:
-                        atkValues[i].Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.UInt;
-                        atkValues[i].UInt = uintValue;
-                        break;
-                    case int intValue:
-                        atkValues[i].Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int;
-                        atkValues[i].Int = intValue;
-                        break;
-                    case float floatValue:
-                        atkValues[i].Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Float;
-                        atkValues[i].Float = floatValue;
-                        break;
-                    case bool boolValue:
-                        atkValues[i].Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Bool;
-                        atkValues[i].Byte = (byte)(boolValue ? 1 : 0);
-                        break;
-                    case string stringValue:
-                        {
-                            atkValues[i].Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.String;
-                            var stringBytes = Encoding.UTF8.GetBytes(stringValue);
-                            var stringAlloc = Marshal.AllocHGlobal(stringBytes.Length + 1);
-                            Marshal.Copy(stringBytes, 0, stringAlloc, stringBytes.Length);
-                            Marshal.WriteByte(stringAlloc, stringBytes.Length, 0);
-                            atkValues[i].String = (byte*)stringAlloc;
-                            break;
-                        }
-                    default:
-                        throw new ArgumentException($"Unable to convert type {v.GetType()} to AtkValue");
-                }
-            }
 
-            unitBase->FireCallback(values.Length, atkValues);
-        }
-        finally
-        {
-            for (var i = 0; i < values.Length; i++)
-            {
-                if (atkValues[i].Type == FFXIVClientStructs.FFXIV.Component.GUI.ValueType.String)
-                {
-                    Marshal.FreeHGlobal(new IntPtr(atkValues[i].String));
-                }
-            }
-            Marshal.FreeHGlobal(new IntPtr(atkValues));
-        }
-    }
     private void Spread()
     {
         if (ClientState.LocalPlayer == null) return;
@@ -291,6 +240,11 @@ public class MBT : IDalamudPlugin
 
     public void OnGameFrameworkUpdate(IFramework framework)
     {
+        if (IPCManager.BossMod_IsEnabled && IPCManager.BossMod_ForbiddenZonesCount > 0)
+        {
+            Stop();
+            return;
+        }
         //If follow is not enabled clear TextColored's and return
         if (!Follow)
         {
@@ -391,8 +345,9 @@ public class MBT : IDalamudPlugin
         Commands.RemoveHandler("/mbt");
         Commands.RemoveHandler("/bc");
         ECommonsMain.Dispose();
-        _messagebus.Dispose();
+        _messagebusReceive.Dispose();
         _messagebusSpread.Dispose();
+        _messagebusSend.Dispose();
         _overrideMovement.Dispose();
     }
     private void OpenMainUI()
@@ -476,7 +431,7 @@ public class MBT : IDalamudPlugin
 
         if (!args.ToUpper().Contains("FW=") || !args.ToUpper().Contains("C="))
         {
-            Chat?.Print(new XivChatEntry
+            Svc.Chat?.Print(new XivChatEntry
             {
                 Message = "Broadcast: syntax = /broadcast FW=TOON1,TOON2,ETC or ALL or ALLBUTME or ALLBUT,TOON1,TOON2,ETC (Remove Space from ToonsFullName) C=/commandname args"
             });
@@ -488,9 +443,9 @@ public class MBT : IDalamudPlugin
         var ARGSc = forWho + " " + rest;
 
         if (ARGSc.Contains("ALLBUTME"))
-            _messagebus.PublishAsync(Encoding.UTF8.GetBytes(ARGSc.Replace("ALLBUTME", "ALLBUT" + ClientState.LocalPlayer.Name.ToString().ToUpper().Replace(" ", ""))));
+            _messagebusSend.PublishAsync(Encoding.UTF8.GetBytes(ARGSc.Replace("ALLBUTME", "ALLBUT" + ClientState.LocalPlayer.Name.ToString().ToUpper().Replace(" ", ""))));
         else
-            _messagebus.PublishAsync(Encoding.UTF8.GetBytes(ARGSc));
+            _messagebusSend.PublishAsync(Encoding.UTF8.GetBytes(ARGSc));
     }
     
     private void DrawUI()
@@ -515,6 +470,7 @@ public class MBT : IDalamudPlugin
     }
     private void MoveTo(Vector3 position, float precision = 0.1f)
     {
+        _overrideAFK.ResetTimers();
         if (UseNavmesh)
         {
             if (_overrideMovement.DesiredPosition != null)
@@ -743,12 +699,107 @@ public class MBT : IDalamudPlugin
 
             //var addon = GameGui.GetAddonByName("SelectYesno", 1);
             //var add = (AddonSelectYesno*)addon;
-            Log.Info(Vector3.DistanceSquared(Svc.ClientState.LocalPlayer.Position,new Vector3(44.4254f,-9, 112.402f)).ToString());
+            //Log.Info(Vector3.DistanceSquared(Svc.ClientState.LocalPlayer.Position,new Vector3(44.4254f,-9, 112.402f)).ToString());
+            // var Agent = AgentContentsFinder.Instance();
+            //Agent->OpenRegularDuty(10);
+            var taskManager = new TaskManager();
+            //s2->UiModule->
+            //taskManager.Enqueue(() => OpenDawnStory());
+
+            //Callback.Fire((AtkUnitBase*)GameGui.GetAddonByName("DawnStory", 1), true, 0, 84);
+
+            //taskManager.DelayNext(2000);
+            // taskManager.Enqueue(() => OpenDawnStory());
+            var addon = (AtkUnitBase*)GameGui.GetAddonByName("DawnStory", 1);
+            /*taskManager.Enqueue(() => OpenDawnStory());
+            taskManager.DelayNext(2000);
+            taskManager.Enqueue(() => addon = (AtkUnitBase*)GameGui.GetAddonByName("DawnStory", 1));
+            taskManager.Enqueue(() => SelectExpansionInDawnStory(addon, 1));
+            taskManager.DelayNext(2000);*/
+            taskManager.Enqueue(() => SelectDutyInDawnStory(addon, "The Vault"));
+            /*taskManager.DelayNext(2000);
+            taskManager.Enqueue(() => addon->Draw());
+            taskManager.DelayNext(2000);
+            taskManager.Enqueue(() => ClickDawnStoryRegisterForDuty(addon));*/
         }
         catch (Exception e)
         {
             Log.Error(e.ToString());
             //throw;
         }
+
+    }
+    private unsafe static void SelectExpansionInDawnStory(AtkUnitBase* addon, int expansion)
+    {
+        int expRadioButton;
+        switch (expansion)
+        {
+            case 0:
+                expRadioButton = 39;
+                break;
+            case 1:
+                expRadioButton = 38;
+                break;
+            case 2:
+                expRadioButton = 37;
+                break;
+            case 3:
+                expRadioButton = 36;
+                break;
+            case 4:
+                expRadioButton = 35;
+                break;
+            default:
+                expRadioButton = -1;
+                break;
+        }
+
+        ClickAddonRadioButtonByNode(addon, expRadioButton);
+    }
+    public unsafe static void SelectDutyInDawnStory(AtkUnitBase* addon, string dutyName)
+    {
+        try
+        {
+            var atkComponentTreeListDungeons = (AtkComponentTreeList*)addon->UldManager.NodeList[7]->GetComponent();
+            for (ulong i = 0; i < atkComponentTreeListDungeons->Items.Size(); i++)
+            {
+                var a3 = atkComponentTreeListDungeons->Items.Get(i).Value->Renderer->AtkComponentButton.ButtonTextNode->NodeText;
+                if (a3.ToString().Equals(dutyName))
+                {
+                    var item = atkComponentTreeListDungeons->GetItem((uint)i);
+                    if (item != null)
+                    {
+                        atkComponentTreeListDungeons->SelectItem((uint)i, true);
+                        atkComponentTreeListDungeons->AtkComponentList.SelectItem((int)i, true);
+                        atkComponentTreeListDungeons->AtkComponentList.DispatchItemEvent((int)i, AtkEventType.MouseClick);
+                        var atkEvent = item->Renderer->AtkComponentButton.AtkComponentBase.AtkResNode->AtkEventManager.Event;
+                        var atkEventType = atkEvent->Type;
+                        var atkEventParam = (int)atkEvent->Param;
+
+                        addon->ReceiveEvent(AtkEventType.MouseClick, 3, atkEvent);
+                        return;
+                    }
+                }
+            }
+        }
+        catch(Exception e) { Log.Info($"{e}"); }
+    }
+    public unsafe static void OpenDawnStory() => AgentModule.Instance()->GetAgentByInternalID(341)->Show();
+
+    public unsafe static void ClickDawnStoryRegisterForDuty(AtkUnitBase* addon) => ClickAddonButtonByNode(addon, 84);
+
+    public unsafe static void ClickAddonButtonByNode(AtkUnitBase* addon, int node)
+    {
+        if (node == -1)
+            return;
+
+        addon->ReceiveEvent(((AtkComponentButton*)addon->UldManager.NodeList[node]->GetComponent())->AtkComponentBase.OwnerNode->AtkResNode.AtkEventManager.Event->Type, (int)(AtkComponentButton*)addon->UldManager.NodeList[node]->GetComponent()->OwnerNode->AtkResNode.AtkEventManager.Event->Param, (AtkEvent*)((AtkComponentButton*)addon->UldManager.NodeList[node]->GetComponent()->OwnerNode->AtkResNode.AtkEventManager.Event));
+    }
+    public unsafe static void ClickAddonRadioButtonByNode(AtkUnitBase* addon, int node)
+    {
+        if (node == -1)
+            return;
+
+        addon->ReceiveEvent(((AtkComponentRadioButton*)addon->UldManager.NodeList[node]->GetComponent())->AtkComponentBase.OwnerNode->AtkResNode.AtkEventManager.Event->Type, (int)(AtkComponentRadioButton*)addon->UldManager.NodeList[node]->GetComponent()->OwnerNode->AtkResNode.AtkEventManager.Event->Param, (AtkEvent*)((AtkComponentRadioButton*)addon->UldManager.NodeList[node]->GetComponent()->OwnerNode->AtkResNode.AtkEventManager.Event));
     }
 }
