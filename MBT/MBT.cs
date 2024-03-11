@@ -14,14 +14,11 @@ using static ECommons.DalamudServices.Svc;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 using ECommons;
-using AutoDuty.Managers;
 using MBT.Movement;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using ECommons.Automation;
 using ECommons.DalamudServices;
-using ECommons.Commands;
-using Lumina.Data.Parsing.Scd;
-using FFXIVClientStructs.Havok;
+using MBT.IPC;
 namespace MBT;
 
 /// <summary>
@@ -30,29 +27,30 @@ namespace MBT;
 
 public class MBT : IDalamudPlugin
 {
-    public string TextFollow1 = "";
-    public Vector4 TextFollow1Color = new(255f, 0f, 0f, 1f);
-    public string TextFollow2 = "";
-    public Vector4 TextFollow2Color = new(255f, 0f, 0f, 1f);
-    public string TextFollow3 = "";
-    public Vector4 TextFollow3Color = new(255f, 0f, 0f, 1f);
-    public bool Follow = false;
-    public bool UseNavmesh = false;
-    public bool Following = false;
-    public int FollowDistance = 1;
-    public string FollowTarget = "";
-    public GameObject? FollowTargetObject = null;
-    public string TeleportPosition = "";
-    public string SpeedBase = "";
-    public List<string> ListBoxText = [];
-    public List<string> ListBoxPOSText = [];
     public string Name => "MBT";
     public static MBT Plugin { get; private set; }
     public Configuration Configuration { get; init; }
     public WindowSystem WindowSystem = new("MBT");
     public MainWindow MainWindow { get; init; }
 
-    private bool _spreading = false;
+    internal string TextFollow1 = "";
+    internal Vector4 TextFollow1Color = new(255f, 0f, 0f, 1f);
+    internal string TextFollow2 = "";
+    internal Vector4 TextFollow2Color = new(255f, 0f, 0f, 1f);
+    internal string TextFollow3 = "";
+    internal Vector4 TextFollow3Color = new(255f, 0f, 0f, 1f);
+    internal bool Follow = false;
+    internal bool UseNavmesh = false;
+    internal bool Following = false;
+    internal int FollowDistance = 1;
+    internal string FollowTarget = "";
+    internal GameObject? FollowTargetObject = null;
+    internal string TeleportPosition = "";
+    internal string SpeedBase = "";
+    internal List<string> ListBoxText = [];
+    internal List<string> ListBoxPOSText = [];
+
+    private static bool _spreading = false;
     private readonly OverrideMovement _overrideMovement;
     private readonly OverrideAFK _overrideAFK;
     private delegate void ExitDutyDelegate(char timeout);
@@ -60,6 +58,7 @@ public class MBT : IDalamudPlugin
     private readonly TinyMessageBus _messagebusSend = new("DalamudBroadcaster");
     private readonly TinyMessageBus _messagebusReceive = new("DalamudBroadcaster");
     private readonly TinyMessageBus _messagebusSpread = new("DalamudBroadcasterSpread");
+    private IPCProvider _ipcProvider;
 
     public MBT(
         DalamudPluginInterface pluginInterface)
@@ -68,7 +67,7 @@ public class MBT : IDalamudPlugin
         {
             Plugin = this;
             ECommonsMain.Init(pluginInterface, this, Module.All);
-
+            
             //Create MainWindow UI
             MainWindow = new MainWindow(this);
             WindowSystem.AddWindow(MainWindow);
@@ -107,6 +106,7 @@ public class MBT : IDalamudPlugin
 
             _overrideMovement = new OverrideMovement();
             _overrideAFK = new OverrideAFK();
+            _ipcProvider = new IPCProvider(this);
         }
         catch (Exception e) { Log.Info($"Failed loading plugin\n{e}"); }
     }
@@ -194,7 +194,7 @@ public class MBT : IDalamudPlugin
             }
         }
     }
-    public void SetTarget()
+    internal void SetTarget()
     {
         //If PlayerCharacter's target is not null, Set our followTarget InputText to our Target Object's .Name field
         if (Targets.Target != null)
@@ -202,7 +202,7 @@ public class MBT : IDalamudPlugin
             FollowTarget = Targets.Target.Name.TextValue;
         }
     }
-    public void SetFollowStatus(bool sts, string name, string distance, Vector4 color)
+    internal void SetFollowStatus(bool sts, string name, string distance, Vector4 color)
     {
         //Set UI TextColored's Values
         string? FollowingSTS;
@@ -240,11 +240,11 @@ public class MBT : IDalamudPlugin
 
     public void OnGameFrameworkUpdate(IFramework framework)
     {
-        if (IPCManager.BossMod_IsEnabled && IPCManager.BossMod_ForbiddenZonesCount > 0)
+        /*if (IPCManager.BossMod_IsEnabled && IPCManager.BossMod_ForbiddenZonesCount > 0)
         {
             Stop();
             return;
-        }
+        }*/
         //If follow is not enabled clear TextColored's and return
         if (!Follow)
         {
@@ -354,22 +354,28 @@ public class MBT : IDalamudPlugin
     {
         MainWindow.IsOpen = true;
     }
+    internal void SetFollow(bool on)
+    {
+        if (on)
+        {
+            Follow = true;
+            _spreading = false;
+        }
+        else
+        {
+            Follow = false;
+            Following = false;
+        }
+        Stop();
+    }
     private void OnCommand(string command, string args)
     {
         //In response to the slash command, just display our main ui or turn Follow on or off
 
         if (args.ToUpper().Contains("FOLLOW ON") || args.ToUpper().Contains("FON"))
-        {
-            Follow = true;
-            _spreading = false;
-            Stop();
-        }
+            SetFollow(true);
         else if (args.ToUpper().Contains("FOLLOW OFF") || args.ToUpper().Contains("FOFF"))
-        {
-            Follow = false;
-            Following = false;
-            Stop();
-        }
+            SetFollow(false);
         else if (args.ToUpper().Contains("COMETOME "))
         {
             var go = GetGameObjectFromName(args[9..]);
@@ -462,8 +468,8 @@ public class MBT : IDalamudPlugin
     }
     private void Stop()
     {
-        if (IPCManager.Vnavmesh_Path_IsRunning)
-            IPCManager.Vnavmesh_Path_Stop();
+        /*if (IPCManager.Vnavmesh_Path_IsRunning)
+            IPCManager.Vnavmesh_Path_Stop();*/
 
         if (_overrideMovement.DesiredPosition != null)
             _overrideMovement.DesiredPosition = null;
@@ -471,7 +477,7 @@ public class MBT : IDalamudPlugin
     private void MoveTo(Vector3 position, float precision = 0.1f)
     {
         _overrideAFK.ResetTimers();
-        if (UseNavmesh)
+        /*if (UseNavmesh)
         {
             if (_overrideMovement.DesiredPosition != null)
                 _overrideMovement.DesiredPosition = null;
@@ -482,15 +488,15 @@ public class MBT : IDalamudPlugin
             IPCManager.Vnavmesh_Path_MoveTo(position);
         }
         else
-        {
-            if (IPCManager.Vnavmesh_Path_IsRunning)
-                IPCManager.Vnavmesh_Path_Stop();
+        {*/
+            //if (IPCManager.Vnavmesh_Path_IsRunning)
+                //IPCManager.Vnavmesh_Path_Stop();
 
             if (_overrideMovement.Precision != precision)
                 _overrideMovement.Precision = precision;
 
             _overrideMovement.DesiredPosition = position;
-        }
+        //}
     }
     public unsafe void TeleportX(int amount)
     {
