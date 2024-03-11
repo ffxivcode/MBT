@@ -54,8 +54,8 @@ public class MainWindow : Window, IDisposable
                 ImGui.SameLine(0, 5);
                 ImGui.TextColored(Plugin.TextFollow3Color, Plugin.TextFollow3);
                 ImGui.Checkbox("Follow Enabed", ref Plugin.Follow);
-                ImGui.SameLine(0, 5);
-                /*using (var d = ImRaii.Disabled(!IPCManager.Vnavmesh_Nav_IsReady || !IPCManager.Vnavmesh_IsEnabled))
+                /*ImGui.SameLine(0, 5);
+                using (var d = ImRaii.Disabled(!IPCManager.Vnavmesh_Nav_IsReady || !IPCManager.Vnavmesh_IsEnabled))
                     ImGui.Checkbox("Use Navmesh", ref Plugin.UseNavmesh);
                 if (!IPCManager.Vnavmesh_IsEnabled)
                 {
