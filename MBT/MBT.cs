@@ -15,7 +15,6 @@ using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 using ECommons;
 using MBT.Movement;
-using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using ECommons.Automation;
 using ECommons.DalamudServices;
 using MBT.IPC;
@@ -266,12 +265,6 @@ public class MBT : IDalamudPlugin
         {
             try
             {
-                /// Need to figure out how to handle this
-                /// because if the Object leaves the zone it
-                /// sorta leaves a ghost GO that is still .IsValid
-                /// and all its data is locked to where it was
-                /// when it left the zone, this current way is
-                /// gross and very inefficient
                 var player = ClientState.LocalPlayer;
                 if (!GetFollowTargetObject())
                     return;
