@@ -21,7 +21,7 @@ using MBT.IPC;
 namespace MBT;
 
 /// <summary>
-/// MBT v10
+/// MBT v11
 /// </summary>
 
 public class MBT : IDalamudPlugin
