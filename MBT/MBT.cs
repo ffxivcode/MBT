@@ -44,8 +44,6 @@ public class MBT : IDalamudPlugin
     internal int FollowDistance = 1;
     internal string FollowTarget = "";
     internal GameObject? FollowTargetObject = null;
-    internal string TeleportPosition = "";
-    internal string SpeedBase = "";
     internal List<string> ListBoxText = [];
     internal List<string> ListBoxPOSText = [];
 
@@ -490,103 +488,5 @@ public class MBT : IDalamudPlugin
 
             _overrideMovement.DesiredPosition = position;
         //}
-    }
-    public unsafe void TeleportX(int amount)
-    {
-        //Teleport
-        try
-        { 
-            var player = ClientState.LocalPlayer;
-            SetPos.SetPosPos(player.Position + new Vector3(amount, 0,
-            0));
-        }
-        catch (Exception e)
-        {
-            Log.Error(e.ToString());
-            //throw;
-        }
-    }
-    
-    public unsafe void TeleportY(int amount)
-    {
-        //Teleport
-        try
-        {
-
-            var player = ClientState.LocalPlayer;
-            SetPos.SetPosPos(player.Position + new Vector3(0, amount,
-            0));
-        }
-        catch (Exception e)
-        {
-            Log.Error(e.ToString());
-            //throw;
-        }
-    }
-    public unsafe void TeleportZ(int amount)
-    {
-        //Teleport
-        try
-        {
-
-            var player = ClientState.LocalPlayer;
-            SetPos.SetPosPos(player.Position + new Vector3(0, 0,
-            amount));
-        }
-        catch (Exception e)
-        {
-            Log.Error(e.ToString());
-            //throw;
-        }
-    }
-
-    
-    public void TTarget()
-    {
-        //Teleport
-        try
-        {
-            if (Targets.Target != null)
-            {
-                var player = ClientState.LocalPlayer;
-                SetPos.SetPosPos(Targets.Target.Position);
-            }
-            
-        }
-        catch (Exception e)
-        {
-            Log.Error(e.ToString());
-            //throw;
-        }
-    }
-    public void SetSpeed()
-    {
-        try
-        {
-            SetPos.MoveSpeed(float.Parse(SpeedBase));
-        }
-        catch (Exception e)
-        {
-            Log.Error(e.ToString());
-            //throw;
-        }
-    }
-    public void TeleportPOS(Vector3 telePos)
-    {
-        //Teleport
-        try
-        {
-            SetPos.SetPosPos(telePos);
-        }
-        catch (Exception e)
-        {
-            Log.Error(e.ToString());
-            //throw;
-        }
-    }
-    public void AddPos()
-    {
-        //Add Start POS
-        TeleportPosition = ClientState.LocalPlayer?.Position.ToString().Replace('<', ' ').Replace('>', ' ').Trim() ?? "";
     }
 }
