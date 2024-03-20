@@ -1,11 +1,18 @@
 {
   "Author": "Herculezz",
   "Name": "MBT",
-  "Punchline": "Multi Boxer Toolkit",
-  "Description": "Tools to help multi boxing",
   "InternalName": "MBT",
+  "AssemblyVersion": "0.0.0.12",
+  "Punchline": "Multi-boxer tool kit",
+  "Description": "A bunch of utilities to simplify multi-boxing",
   "ApplicableVersion": "any",
-  "Tags": [
-    "MBT"
-  ]
+  "RepoUrl": "",
+  "DalamudApiLevel": 9,
+  "DownloadLinkInstall": "https://github.com/ffxivcode/DalamudPlugins/raw/main/MBT/latest.zip",
+  "DownloadLinkUpdate": "https://github.com/ffxivcode/DalamudPlugins/raw/main/MBT/latest.zip",
+  "ImageUrls": [
+    "https://raw.githubusercontent.com/ffxivcode/DalamudPlugins/main/MBT/MBT1.png",
+    "https://raw.githubusercontent.com/ffxivcode/DalamudPlugins/main/MBT/MBT2.png"
+  ],
+  "IconUrl": "https://raw.githubusercontent.com/ffxivcode/DalamudPlugins/main/MBT/MBTi.png"
 }
