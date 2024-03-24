@@ -58,6 +58,6 @@ public class MainWindow : Window, IDisposable
         ImGui.InputTextWithHint("##FollowTarget", "Follow Target", ref Plugin.FollowTarget, 20);
         ImGui.SameLine(0, 5);
         if (ImGui.Button("Add Current Target"))
-            Plugin.SetTarget();
+            Plugin.SetTargetB = true;
     }
 }

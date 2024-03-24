@@ -16,7 +16,6 @@ using Dalamud.Plugin.Services;
 using ECommons;
 using MBT.Movement;
 using ECommons.Automation;
-using ECommons.DalamudServices;
 using MBT.IPC;
 namespace MBT;
 
@@ -31,7 +30,8 @@ public class MBT : IDalamudPlugin
     public Configuration Configuration { get; init; }
     public WindowSystem WindowSystem = new("MBT");
     public MainWindow MainWindow { get; init; }
-
+    
+    internal bool SetTargetB = false;
     internal string TextFollow1 = "";
     internal Vector4 TextFollow1Color = new(255f, 0f, 0f, 1f);
     internal string TextFollow2 = "";
@@ -191,7 +191,7 @@ public class MBT : IDalamudPlugin
             }
         }
     }
-    internal void SetTarget()
+    private void SetTarget()
     {
         //If PlayerCharacter's target is not null, Set our followTarget InputText to our Target Object's .Name field
         if (Targets.Target != null)
@@ -237,6 +237,11 @@ public class MBT : IDalamudPlugin
 
     public void OnGameFrameworkUpdate(IFramework framework)
     {
+        if (SetTargetB)
+        {
+            SetTarget();
+            SetTargetB = false;
+        }
         /*if (IPCManager.BossMod_IsEnabled && IPCManager.BossMod_ForbiddenZonesCount > 0)
         {
             Stop();
@@ -428,7 +433,7 @@ public class MBT : IDalamudPlugin
 
         if (!args.ToUpper().Contains("FW=") || !args.ToUpper().Contains("C="))
         {
-            Svc.Chat?.Print(new XivChatEntry
+            ECommons.DalamudServices.Svc.Chat?.Print(new XivChatEntry
             {
                 Message = "Broadcast: syntax = /broadcast FW=TOON1,TOON2,ETC or ALL or ALLBUTME or ALLBUT,TOON1,TOON2,ETC (Remove Space from ToonsFullName) C=/commandname args"
             });
