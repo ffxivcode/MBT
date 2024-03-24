@@ -63,7 +63,7 @@ public class MBT : IDalamudPlugin
         try
         {
             Plugin = this;
-            ECommonsMain.Init(pluginInterface, this, Module.All);
+            ECommonsMain.Init(pluginInterface, this);
             
             //Create MainWindow UI
             MainWindow = new MainWindow(this);
