@@ -5,19 +5,16 @@ namespace MBT.IPC
 {
     internal class IPCProvider
     {
-        private static MBT _mBT;
-
-        internal IPCProvider(MBT mBT)
+        internal IPCProvider()
         {
             EzIPC.Init(this);
-            _mBT = mBT;
         }
 
-        [EzIPC] public void SetFollowStatus(bool on) => _mBT.SetFollow(on);
-        [EzIPC] public void SetFollowTarget(string name) => _mBT.FollowTarget = name;
-        [EzIPC] public void SetFollowDistance(int distance) => _mBT.FollowDistance = distance;
-        [EzIPC] public bool GetFollowStatus() => _mBT.Follow;
-        [EzIPC] public int GetFollowDistance() => _mBT.FollowDistance;
-        [EzIPC] public string GetFollowTarget() => _mBT.FollowTargetObject?.Name.TextValue ?? null;
+        [EzIPC] public void SetFollowStatus(bool on) => MBT.Plugin.SetFollow(on);
+        [EzIPC] public void SetFollowTarget(string name) => MBT.Plugin.FollowTarget = name;
+        [EzIPC] public void SetFollowDistance(int distance) => MBT.Plugin.FollowDistance = distance;
+        [EzIPC] public bool GetFollowStatus() => MBT.Plugin.Follow;
+        [EzIPC] public int GetFollowDistance() => MBT.Plugin.FollowDistance;
+        [EzIPC] public string GetFollowTarget() => MBT.Plugin.FollowTargetObject?.Name.TextValue ?? null;
     }
 }

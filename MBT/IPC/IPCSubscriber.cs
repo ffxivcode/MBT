@@ -2,11 +2,10 @@
 using ECommons.Reflection;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Numerics;
 #nullable disable
 
-namespace AutoDuty.IPC
+namespace MBT.IPC
 {
     public class BossMod_IPCSubscriber
     {

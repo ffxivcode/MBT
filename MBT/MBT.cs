@@ -11,12 +11,14 @@ using System.Runtime.InteropServices;
 using System.Text;
 using TinyIpc.Messaging;
 using static ECommons.DalamudServices.Svc;
-using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 using ECommons;
 using MBT.Movement;
 using ECommons.Automation;
 using MBT.IPC;
+using MBT.Windows;
+using ECommons.DalamudServices;
+using Dalamud.Game.ClientState.Objects.Types;
 namespace MBT;
 
 /// <summary>
@@ -43,7 +45,7 @@ public class MBT : IDalamudPlugin
     internal bool Following = false;
     internal int FollowDistance = 1;
     internal string FollowTarget = "";
-    internal GameObject? FollowTargetObject = null;
+    internal IGameObject? FollowTargetObject = null;
     internal List<string> ListBoxText = [];
     internal List<string> ListBoxPOSText = [];
 
@@ -58,7 +60,7 @@ public class MBT : IDalamudPlugin
     private IPCProvider _ipcProvider;
 
     public MBT(
-        DalamudPluginInterface pluginInterface)
+        IDalamudPluginInterface pluginInterface)
     {
         try
         {
@@ -84,7 +86,7 @@ public class MBT : IDalamudPlugin
                 "/mbt followdistance or fd # -> sets Follow distance to # (must be int)\n" +
                 "/mbt spread -> Spreads toons away from LocalPlayer\n" +
                 "/mbt exitduty or ed -> Immediately exits the duty\n" +
-                "/mbt acceptduty or ad -> Immediately accepts the duty finder popup\n"
+                "/mbt acceptduty or ad -> Immediately accepts the duty finder popup\n" 
             });
 
             //Draw UI
@@ -101,9 +103,9 @@ public class MBT : IDalamudPlugin
 
             _exitDuty = Marshal.GetDelegateForFunctionPointer<ExitDutyDelegate>(SigScanner.ScanText("40 53 48 83 ec 20 48 8b 05 ?? ?? ?? ?? 0f b6 d9"));
 
-            _overrideMovement = new OverrideMovement();
-            _overrideAFK = new OverrideAFK();
-            _ipcProvider = new IPCProvider(this);
+            _overrideMovement = new();
+            _overrideAFK = new();
+            _ipcProvider = new();
         }
         catch (Exception e) { Log.Info($"Failed loading plugin\n{e}"); }
     }
@@ -117,46 +119,47 @@ public class MBT : IDalamudPlugin
     {
         if (ClientState.LocalPlayer == null) return;
         if (Party == null) return;
-        var playerObjectId = ClientState.LocalPlayer.ObjectId;
+        var playerGameObjectId = ClientState.LocalPlayer.GameObjectId;
         List<uint> partyList = new();
 
         foreach (var partyMember in Party)
         {
-            if (partyMember.ObjectId == ClientState.LocalPlayer.ObjectId) { continue; }
+            if (partyMember.ObjectId == ClientState.LocalPlayer.GameObjectId) { continue; }
 
             if(partyMember.GameObject != null)
-                partyList.Add(partyMember.GameObject.ObjectId);
+                partyList.Add(partyMember.ObjectId);
         }
         
         for(int i = 0; i < partyList.Count; i++)
         {
             var j = i + 1;
-            Log.Info("OnCommandSpread: PartyList: " + partyList[i] + " : " + playerObjectId + "," + partyList[i] + "," + "*" + j + "*");
-            _messagebusSpread.PublishAsync(Encoding.UTF8.GetBytes(playerObjectId + "," + partyList[i] + "," + "*" + j +"*"));
+            Log.Info("OnCommandSpread: PartyList: " + partyList[i] + " : " + playerGameObjectId + "," + partyList[i] + "," + "*" + j + "*");
+            _messagebusSpread.PublishAsync(Encoding.UTF8.GetBytes(playerGameObjectId + "," + partyList[i] + "," + "*" + j +"*"));
         }
     }
 
-    private void MessageReceived(string message)
+    private static void MessageReceived(string message)
     {
-        if (ClientState.LocalPlayer is null) { return; }
+        if (Svc.ClientState.LocalPlayer is null)
+            return;
 
         List<string> forWhos;
         if (message.Contains("FW=ALLBUT"))
         {
-            if (message.Contains("FW=ALLBUT" + ClientState.LocalPlayer.Name.ToString().ToUpper().Replace(" ", "")))
+            if (message.Contains("FW=ALLBUT" + Svc.ClientState.LocalPlayer.Name.ToString().ToUpper().Replace(" ", "")))
                 return;
             else
-                forWhos = new List<string> { (ClientState.LocalPlayer.Name.ToString().ToUpper().Replace(" ", "")) };
+                forWhos = [(Svc.ClientState.LocalPlayer.Name.ToString().ToUpper().Replace(" ", ""))];
         }
         else if (message.Contains("FW=ALL "))
-            forWhos = new List<string> { (ClientState.LocalPlayer.Name.ToString().ToUpper().Replace(" ", "")) };
+            forWhos = [(Svc.ClientState.LocalPlayer.Name.ToString().ToUpper().Replace(" ", ""))];
         else
-            forWhos = message.Substring(message.IndexOf("FW=") + 3, message.IndexOf(" ") - (message.IndexOf("FW=") + 3)).Split(',').ToList();
+            forWhos = [.. message[(message.IndexOf("FW=") + 3)..message.IndexOf(' ')].Split(',')];
 
-        if (forWhos.Any(i => i.Equals(ClientState.LocalPlayer.Name.ToString().ToUpper().Replace(" ", ""))))
+        if (forWhos.Any(i => i.Equals(Svc.ClientState.LocalPlayer.Name.ToString().ToUpper().Replace(" ", ""))))
         {
-            Log.Info(message.Substring(message.IndexOf("C=") + 2));
-            ECommons.Automation.Chat.Instance.ExecuteCommand(message.Substring(message.IndexOf("C=") + 2));
+            Svc.Log.Info(message[(message.IndexOf("C=") + 2)..]);
+            ECommons.Automation.Chat.Instance.ExecuteCommand(message[(message.IndexOf("C=") + 2)..]);
         }
     }
 
@@ -167,12 +170,12 @@ public class MBT : IDalamudPlugin
         Follow = false;
         _spreading = true;
         var messageList = message.Split(',').ToList();
-        var playerObjectId = ClientState.LocalPlayer.ObjectId;
+        var playerGameObjectId = ClientState.LocalPlayer.GameObjectId;
         Log.Info("messageList.Count: " + messageList.Count + " messageList[0]: " + messageList[0] + " messageList[1]: " + messageList[1] + " messageList[2]: " + messageList[2]);
         
-        if (Convert.ToUInt32(messageList[1]) == playerObjectId)
+        if (Convert.ToUInt32(messageList[1]) == playerGameObjectId)
         {
-            var sender = Objects.Where(s => s.ObjectId == Convert.ToUInt32(messageList[0]));
+            var sender = Objects.Where(s => s.GameObjectId == Convert.ToUInt32(messageList[0]));
             if (sender != null)
             {
                 var pos = sender.First().Position;
@@ -215,7 +218,7 @@ public class MBT : IDalamudPlugin
         TextFollow3Color = color;
     }
 
-    private static GameObject? GetGameObjectFromName(string _objectName) => Objects.FirstOrDefault(s => s.Name.ToString().Equals(_objectName));
+    private static IGameObject? GetGameObjectFromName(string _objectName) => Objects.FirstOrDefault(s => s.Name.ToString().Equals(_objectName));
 
     public bool GetFollowTargetObject()
     {
@@ -276,7 +279,7 @@ public class MBT : IDalamudPlugin
 
                 //if (targetFollowTargetsTargets)
                 //{
-                //    if (player.TargetObjectId != followTargetObject.TargetObjectId && followTargetObject.TargetObjectId != 0)
+                //    if (player.TargetGameObjectId != followTargetObject.TargetGameObjectId && followTargetObject.TargetGameObjectId != 0)
                 //    {
                 //        Log.Info("1");
                 //        Targets.Target = followTargetObject.TargetObject;

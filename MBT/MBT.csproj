@@ -31,8 +31,8 @@
 
   <ItemGroup>
 	  <ProjectReference Include="..\ECommons\ECommons\ECommons.csproj" />
-    <PackageReference Include="DalamudPackager" Version="2.1.12" />
-    <PackageReference Include="TinyIpc" Version="4.3.0" />
+    <PackageReference Include="DalamudPackager" Version="2.1.13" />
+    <PackageReference Include="TinyIpc" Version="4.3.2" />
     <Reference Include="FFXIVClientStructs">
       <HintPath>$(DalamudLibPath)FFXIVClientStructs.dll</HintPath>
       <Private>false</Private>
