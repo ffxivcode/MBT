@@ -16,9 +16,9 @@ using ECommons;
 using MBT.Movement;
 using ECommons.Automation;
 using MBT.IPC;
-using MBT.Windows;
 using ECommons.DalamudServices;
 using Dalamud.Game.ClientState.Objects.Types;
+using ECommons.Throttlers;
 namespace MBT;
 
 /// <summary>
@@ -41,7 +41,6 @@ public class MBT : IDalamudPlugin
     internal string TextFollow3 = "";
     internal Vector4 TextFollow3Color = new(255f, 0f, 0f, 1f);
     internal bool Follow = false;
-    internal bool UseNavmesh = false;
     internal bool Following = false;
     internal int FollowDistance = 1;
     internal string FollowTarget = "";
@@ -51,7 +50,6 @@ public class MBT : IDalamudPlugin
 
     private static bool _spreading = false;
     private readonly OverrideMovement _overrideMovement;
-    private readonly OverrideAFK _overrideAFK;
     private delegate void ExitDutyDelegate(char timeout);
     private ExitDutyDelegate _exitDuty;
     private readonly TinyMessageBus _messagebusSend = new("DalamudBroadcaster");
@@ -101,10 +99,9 @@ public class MBT : IDalamudPlugin
             _messagebusSpread.MessageReceived +=
                 (sender, e) => MessageReceivedSpread(Encoding.UTF8.GetString((byte[])e.Message));
 
-            _exitDuty = Marshal.GetDelegateForFunctionPointer<ExitDutyDelegate>(SigScanner.ScanText("40 53 48 83 ec 20 48 8b 05 ?? ?? ?? ?? 0f b6 d9"));
+            //_exitDuty = Marshal.GetDelegateForFunctionPointer<ExitDutyDelegate>(SigScanner.ScanText("40 53 48 83 ec 20 48 8b 05 ?? ?? ?? ?? 0f b6 d9"));
 
             _overrideMovement = new();
-            _overrideAFK = new();
             _ipcProvider = new();
         }
         catch (Exception e) { Log.Info($"Failed loading plugin\n{e}"); }
@@ -240,6 +237,9 @@ public class MBT : IDalamudPlugin
 
     public void OnGameFrameworkUpdate(IFramework framework)
     {
+        if (!EzThrottler.Throttle("OGF", 50))
+            { return; }
+
         if (SetTargetB)
         {
             SetTarget();
@@ -467,34 +467,33 @@ public class MBT : IDalamudPlugin
     }
     private void Stop()
     {
-        /*if (IPCManager.Vnavmesh_Path_IsRunning)
-            IPCManager.Vnavmesh_Path_Stop();*/
+        if (VNavmesh_IPCSubscriber.Path_IsRunning())
+            VNavmesh_IPCSubscriber.Path_Stop();
 
-        if (_overrideMovement.DesiredPosition != null)
-            _overrideMovement.DesiredPosition = null;
+        if (_overrideMovement.Enabled)
+            _overrideMovement.Enabled = false;
     }
     private void MoveTo(Vector3 position, float precision = 0.1f)
     {
-        _overrideAFK.ResetTimers();
-        /*if (UseNavmesh)
+        if (Configuration.UseNavmesh)
         {
-            if (_overrideMovement.DesiredPosition != null)
-                _overrideMovement.DesiredPosition = null;
+            if (_overrideMovement.Enabled)
+                _overrideMovement.Enabled = false;
 
-            if (IPCManager.Vnavmesh_Path_GetTolerance != precision)
-                IPCManager.Vnavmesh_Path_SetTolerance(precision);
+            if (VNavmesh_IPCSubscriber.Path_GetTolerance() != precision)
+                VNavmesh_IPCSubscriber.Path_SetTolerance(precision);
 
-            IPCManager.Vnavmesh_Path_MoveTo(position);
+            VNavmesh_IPCSubscriber.SimpleMove_PathfindAndMoveTo(position, false);
         }
         else
-        {*/
-            //if (IPCManager.Vnavmesh_Path_IsRunning)
-                //IPCManager.Vnavmesh_Path_Stop();
+        {
+            if (VNavmesh_IPCSubscriber.Path_IsRunning())
+                VNavmesh_IPCSubscriber.Path_Stop();
 
             if (_overrideMovement.Precision != precision)
                 _overrideMovement.Precision = precision;
 
             _overrideMovement.DesiredPosition = position;
-        //}
+        }
     }
 }

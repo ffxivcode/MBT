@@ -7,8 +7,8 @@ namespace MBT;
 [Serializable]
 public class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 14;
-
+    public int Version { get => 14; set { } }
+    public bool UseNavmesh = false;
     // the below exist just to make saving less cumbersome
     [NonSerialized]
     private IDalamudPluginInterface? PluginInterface;
