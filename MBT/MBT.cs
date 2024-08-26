@@ -7,7 +7,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using System.Runtime.InteropServices;
 using System.Text;
 using TinyIpc.Messaging;
 using static ECommons.DalamudServices.Svc;
@@ -349,10 +348,8 @@ public class MBT : IDalamudPlugin
         _messagebusSend.Dispose();
         _overrideMovement.Dispose();
     }
-    private void OpenMainUI()
-    {
-        MainWindow.IsOpen = true;
-    }
+    private void OpenMainUI() => MainWindow.IsOpen = true;
+    
     internal void SetFollow(bool on)
     {
         if (on)
@@ -371,11 +368,11 @@ public class MBT : IDalamudPlugin
     {
         //In response to the slash command, just display our main ui or turn Follow on or off
 
-        if (args.ToUpper().Contains("FOLLOW ON") || args.ToUpper().Contains("FON"))
+        if (args.Contains("FOLLOW ON", StringComparison.CurrentCultureIgnoreCase) || args.Contains("FON", StringComparison.CurrentCultureIgnoreCase))
             SetFollow(true);
-        else if (args.ToUpper().Contains("FOLLOW OFF") || args.ToUpper().Contains("FOFF"))
+        else if (args.Contains("FOLLOW OFF", StringComparison.CurrentCultureIgnoreCase) || args.Contains("FOFF", StringComparison.CurrentCultureIgnoreCase))
             SetFollow(false);
-        else if (args.ToUpper().Contains("COMETOME "))
+        else if (args.Contains("COMETOME ", StringComparison.CurrentCultureIgnoreCase))
         {
             var go = GetGameObjectFromName(args[9..]);
             if (go != null)
@@ -384,7 +381,7 @@ public class MBT : IDalamudPlugin
                 MoveTo(go.Position, 0.1f);
             }
         }
-        else if (args.ToUpper().Contains("CTM "))
+        else if (args.Contains("CTM ", StringComparison.CurrentCultureIgnoreCase))
         {
             var go = GetGameObjectFromName(args[4..]);
             if (go != null)
@@ -393,36 +390,36 @@ public class MBT : IDalamudPlugin
                 MoveTo(go.Position, 0.1f);
             }
         }
-        else if (args.ToUpper().Contains("FOLLOWTARGET "))
+        else if (args.Contains("FOLLOWTARGET ", StringComparison.CurrentCultureIgnoreCase))
         {
             FollowTarget = args[13..];
         }
-        else if (args.ToUpper().Contains("FT "))
+        else if (args.Contains("FT ", StringComparison.CurrentCultureIgnoreCase))
         {
             FollowTarget = args[3..];
         }
-        else if (args.ToUpper().Contains("FOLLOWDISTANCE "))
+        else if (args.Contains("FOLLOWDISTANCE ", StringComparison.CurrentCultureIgnoreCase))
         {
             FollowDistance = Convert.ToInt32(args[15..]);
         }
-        else if (args.ToUpper().Contains("FD "))
+        else if (args.Contains("FD ", StringComparison.CurrentCultureIgnoreCase))
         {
             FollowDistance = Convert.ToInt32(args[3..]);
         }
-        else if (args.ToUpper().Contains("SPREAD"))
+        else if (args.Contains("SPREAD", StringComparison.CurrentCultureIgnoreCase))
         {
             Stop();
             Spread();
         }
-        else if (args.ToUpper().Contains("ACCEPTDUTY") || args.ToUpper().Contains("AD"))
+        else if (args.Contains("ACCEPTDUTY", StringComparison.CurrentCultureIgnoreCase) || args.Contains("AD", StringComparison.CurrentCultureIgnoreCase))
         {
             AcceptDuty();
         }
-        else if (args.ToUpper().Contains("EXITDUTY") || args.ToUpper().Contains("ED"))
+        /*else if (args.Contains("EXITDUTY", StringComparison.CurrentCultureIgnoreCase) || args.Contains("ED", StringComparison.CurrentCultureIgnoreCase))
         {
             //maybe make this have to be pressed / called / invoked twice to prevent accidental exiting
-            this._exitDuty.Invoke((char)0);
-        }
+            _exitDuty.Invoke((char)0);
+        }*/
         else if (MainWindow.IsOpen)
             MainWindow.IsOpen = false;
         else
@@ -434,17 +431,17 @@ public class MBT : IDalamudPlugin
         if (ClientState.LocalPlayer is null) { return; }
         if (args == null) { return; }
 
-        if (!args.ToUpper().Contains("FW=") || !args.ToUpper().Contains("C="))
+        if (!args.Contains("FW=", StringComparison.CurrentCultureIgnoreCase) || !args.Contains("C=", StringComparison.CurrentCultureIgnoreCase))
         {
-            ECommons.DalamudServices.Svc.Chat?.Print(new XivChatEntry
+            Svc.Chat?.Print(new XivChatEntry
             {
                 Message = "Broadcast: syntax = /broadcast FW=TOON1,TOON2,ETC or ALL or ALLBUTME or ALLBUT,TOON1,TOON2,ETC (Remove Space from ToonsFullName) C=/commandname args"
             });
 
             return;
         }
-        var forWho = args.Substring(args.ToUpper().IndexOf("FW="), args.IndexOf(" ") - (args.ToUpper().IndexOf("FW="))).ToUpper();
-        var rest = "C=" + args.Substring(args.ToUpper().IndexOf("C=") + 2);
+        var forWho = args[args.IndexOf("FW=", StringComparison.CurrentCultureIgnoreCase)..args.IndexOf(' ')].ToUpper();
+        var rest = string.Concat("C=", args.AsSpan(args.IndexOf("C=", StringComparison.CurrentCultureIgnoreCase) + 2));
         var ARGSc = forWho + " " + rest;
 
         if (ARGSc.Contains("ALLBUTME"))
@@ -453,11 +450,8 @@ public class MBT : IDalamudPlugin
             _messagebusSend.PublishAsync(Encoding.UTF8.GetBytes(ARGSc));
     }
     
-    private void DrawUI()
-    {
-        //Draw Window
-        this.WindowSystem.Draw();
-    }
+    private void DrawUI() => WindowSystem.Draw();
+    
     private void StopAllMovement()
     {
         Follow = false;
@@ -465,6 +459,7 @@ public class MBT : IDalamudPlugin
         _spreading = false;
         Stop();
     }
+
     private void Stop()
     {
         if (VNavmesh_IPCSubscriber.Path_IsRunning())
@@ -473,6 +468,7 @@ public class MBT : IDalamudPlugin
         if (_overrideMovement.Enabled)
             _overrideMovement.Enabled = false;
     }
+
     private void MoveTo(Vector3 position, float precision = 0.1f)
     {
         if (Configuration.UseNavmesh)
