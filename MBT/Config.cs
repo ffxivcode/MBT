@@ -7,7 +7,7 @@ namespace MBT;
 [Serializable]
 public class Configuration : IPluginConfiguration
 {
-    public int Version { get => 14; set { } }
+    public int Version { get => 15; set { } }
     public bool UseNavmesh = false;
     // the below exist just to make saving less cumbersome
     [NonSerialized]
