@@ -18,6 +18,8 @@ using MBT.IPC;
 using ECommons.DalamudServices;
 using Dalamud.Game.ClientState.Objects.Types;
 using ECommons.Throttlers;
+using ECommons.GameHelpers;
+using MBT.Windows;
 namespace MBT;
 
 /// <summary>
@@ -31,30 +33,37 @@ public class MBT : IDalamudPlugin
     public Configuration Configuration { get; init; }
     public WindowSystem WindowSystem = new("MBT");
     public MainWindow MainWindow { get; init; }
-    
-    internal bool SetTargetB = false;
-    internal string TextFollow1 = "";
-    internal Vector4 TextFollow1Color = new(255f, 0f, 0f, 1f);
-    internal string TextFollow2 = "";
-    internal Vector4 TextFollow2Color = new(255f, 0f, 0f, 1f);
-    internal string TextFollow3 = "";
-    internal Vector4 TextFollow3Color = new(255f, 0f, 0f, 1f);
-    internal bool Follow = false;
-    internal bool Following = false;
-    internal int FollowDistance = 1;
-    internal string FollowTarget = "";
-    internal IGameObject? FollowTargetObject = null;
-    internal List<string> ListBoxText = [];
-    internal List<string> ListBoxPOSText = [];
 
-    private static bool _spreading = false;
+    internal bool Follow
+    {
+        get => _follow;
+        set
+        {
+            _follow = value;
+            if (value)
+                Framework.Update += Framework_Update;
+            else
+            {
+                VNavmesh_IPCSubscriber.Path_Stop();
+                _overrideMovement.Enabled = false;
+                Framework.Update -= Framework_Update;
+            }
+        }
+    }
+
+    internal float FollowDistance = 1;
+    internal float PlayerDistance => Player.Available && FollowTargetObject != null ? Vector3.Distance(Player.Position, FollowTargetObject.Position) : 0;
+    internal string FollowTarget = string.Empty;
+    internal IGameObject? FollowTargetObject => FollowTargetObject != null && FollowTargetObject.Name.TextValue.Equals(FollowTarget, StringComparison.CurrentCultureIgnoreCase) ? FollowTargetObject : Objects.FirstOrDefault(s => s.Name.ExtractText().ToString().Equals(FollowTarget));
+
+    private bool _follow = false;
     private readonly OverrideMovement _overrideMovement;
     private delegate void ExitDutyDelegate(char timeout);
     private ExitDutyDelegate _exitDuty;
     private readonly TinyMessageBus _messagebusSend = new("DalamudBroadcaster");
     private readonly TinyMessageBus _messagebusReceive = new("DalamudBroadcaster");
     private readonly TinyMessageBus _messagebusSpread = new("DalamudBroadcasterSpread");
-    private IPCProvider _ipcProvider;
+    private readonly IPCProvider _ipcProvider;
 
     public MBT(
         IDalamudPluginInterface pluginInterface)
@@ -90,9 +99,6 @@ public class MBT : IDalamudPlugin
             PluginInterface.UiBuilder.Draw += DrawUI;
             PluginInterface.UiBuilder.OpenMainUi += OpenMainUI;
 
-            //Attach our OnGameFrameworkUpdate function to our game's Framework Update (called once every frame)
-            Framework.Update += OnGameFrameworkUpdate;
-
             _messagebusReceive.MessageReceived +=
                 (sender, e) => MessageReceived(Encoding.UTF8.GetString((byte[])e.Message));
             _messagebusSpread.MessageReceived +=
@@ -106,21 +112,18 @@ public class MBT : IDalamudPlugin
         catch (Exception e) { Log.Info($"Failed loading plugin\n{e}"); }
     }
 
-    private static unsafe void AcceptDuty()
-    {
-        Callback.Fire((AtkUnitBase*)GameGui.GetAddonByName("ContentsFinderConfirm", 1), true, 8);
-    }
+    private static unsafe void AcceptDuty() => Callback.Fire((AtkUnitBase*)GameGui.GetAddonByName("ContentsFinderConfirm", 1), true, 8);
 
     private void Spread()
     {
-        if (ClientState.LocalPlayer == null) return;
-        if (Party == null) return;
-        var playerGameObjectId = ClientState.LocalPlayer.GameObjectId;
-        List<uint> partyList = new();
+        if (!Player.Available || Party.PartyId == 0) return;
+        
+        var playerGameObjectId = Player.Object.GameObjectId;
+        List<uint> partyList = [];
 
         foreach (var partyMember in Party)
         {
-            if (partyMember.ObjectId == ClientState.LocalPlayer.GameObjectId) { continue; }
+            if (partyMember.ObjectId == Player.Object.GameObjectId) continue;
 
             if(partyMember.GameObject != null)
                 partyList.Add(partyMember.ObjectId);
@@ -136,25 +139,24 @@ public class MBT : IDalamudPlugin
 
     private static void MessageReceived(string message)
     {
-        if (Svc.ClientState.LocalPlayer is null)
-            return;
+        if (!Player.Available) return;
 
         List<string> forWhos;
         if (message.Contains("FW=ALLBUT"))
         {
-            if (message.Contains("FW=ALLBUT" + Svc.ClientState.LocalPlayer.Name.ToString().ToUpper().Replace(" ", "")))
+            if (message.Contains("FW=ALLBUT" + Player.Name.Replace(" ", string.Empty, StringComparison.CurrentCultureIgnoreCase)))
                 return;
             else
-                forWhos = [(Svc.ClientState.LocalPlayer.Name.ToString().ToUpper().Replace(" ", ""))];
+                forWhos = [(Player.Name.Replace(" ", string.Empty, StringComparison.CurrentCultureIgnoreCase))];
         }
         else if (message.Contains("FW=ALL "))
-            forWhos = [(Svc.ClientState.LocalPlayer.Name.ToString().ToUpper().Replace(" ", ""))];
+            forWhos = [(Player.Name.Replace(" ", string.Empty, StringComparison.CurrentCultureIgnoreCase))];
         else
             forWhos = [.. message[(message.IndexOf("FW=") + 3)..message.IndexOf(' ')].Split(',')];
 
-        if (forWhos.Any(i => i.Equals(Svc.ClientState.LocalPlayer.Name.ToString().ToUpper().Replace(" ", ""))))
+        if (forWhos.Any(i => i.Equals(Player.Name.Replace(" ", string.Empty, StringComparison.CurrentCultureIgnoreCase))))
         {
-            Svc.Log.Info(message[(message.IndexOf("C=") + 2)..]);
+            Log.Info(message[(message.IndexOf("C=") + 2)..]);
             ECommons.Automation.Chat.Instance.ExecuteCommand(message[(message.IndexOf("C=") + 2)..]);
         }
     }
@@ -162,11 +164,10 @@ public class MBT : IDalamudPlugin
     private void MessageReceivedSpread(string message)
     {
         Log.Info("MessageRecieved: " + message);
-        if (ClientState.LocalPlayer == null) return;
+        if (!Player.Available) return;
         Follow = false;
-        _spreading = true;
         var messageList = message.Split(',').ToList();
-        var playerGameObjectId = ClientState.LocalPlayer.GameObjectId;
+        var playerGameObjectId = Player.Object.GameObjectId;
         Log.Info("messageList.Count: " + messageList.Count + " messageList[0]: " + messageList[0] + " messageList[1]: " + messageList[1] + " messageList[2]: " + messageList[2]);
         
         if (Convert.ToUInt32(messageList[1]) == playerGameObjectId)
@@ -190,156 +191,22 @@ public class MBT : IDalamudPlugin
             }
         }
     }
-    private void SetTarget()
-    {
-        //If PlayerCharacter's target is not null, Set our followTarget InputText to our Target Object's .Name field
-        if (Targets.Target != null)
-        {
-            FollowTarget = Targets.Target.Name.TextValue;
-        }
-    }
-    internal void SetFollowStatus(bool sts, string name, string distance, Vector4 color)
-    {
-        //Set UI TextColored's Values
-        string? FollowingSTS;
-        if (sts)
-            FollowingSTS = "On";
-        else
-            FollowingSTS = "Off";
-        TextFollow1 = " " + FollowingSTS;
-        TextFollow2 = "Name: " + name;
-        TextFollow3 = "Distance: " + distance + " <= " + FollowDistance;
-        TextFollow1Color = color;
-        TextFollow2Color = color;
-        TextFollow3Color = color;
-    }
 
-    private static IGameObject? GetGameObjectFromName(string _objectName) => Objects.FirstOrDefault(s => s.Name.ToString().Equals(_objectName));
-
-    public bool GetFollowTargetObject()
+    private void Framework_Update(IFramework framework)
     {
-        var ftarget = GetGameObjectFromName(FollowTarget);
-        if (ftarget == null)
-        {
-            FollowTargetObject = null;
-            SetFollowStatus(false, FollowTarget + " not found", "0", new(255f, 0f, 0f, 1f));
-            if (Following)
-                Stop();
-            return false;
-        }
-        else
-        {
-            FollowTargetObject = ftarget;
-            return true;
-        }
-    }
-
-    public void OnGameFrameworkUpdate(IFramework framework)
-    {
-        if (!EzThrottler.Throttle("OGF", 50))
-            { return; }
-
-        if (SetTargetB)
-        {
-            SetTarget();
-            SetTargetB = false;
-        }
-        /*if (IPCManager.BossMod_IsEnabled && IPCManager.BossMod_ForbiddenZonesCount > 0)
-        {
-            Stop();
+        if (!Player.Available || !EzThrottler.Throttle("Framework_Update", 50))
             return;
-        }*/
-        //If follow is not enabled clear TextColored's and return
-        if (!Follow)
-        {
-            SetFollowStatus(false, "", "", new(255f, 0f, 0f, 1f));
-            if (Following && !_spreading)
-            {
-                Stop();
-                Following = false;
-            }
-            return;
-        }
 
-        //If LocalPlayer object is null return (we are not logged in or between zones etc..)
-        if (ClientState.LocalPlayer == null) return;
-
-        //If followTarget is not empty GetFollowTargetObject then set our player variable and calculate the distance
-        //between player and followTargetObject and if distance > followDistance move to the followTargetObject
-        if (!string.IsNullOrEmpty(FollowTarget))
-        {
-            try
-            {
-                var player = ClientState.LocalPlayer;
-                if (!GetFollowTargetObject())
-                    return;
-               
-                if (FollowTargetObject == null || player == null) return;
-
-                //if (targetFollowTargetsTargets)
-                //{
-                //    if (player.TargetGameObjectId != followTargetObject.TargetGameObjectId && followTargetObject.TargetGameObjectId != 0)
-                //    {
-                //        Log.Info("1");
-                //        Targets.Target = followTargetObject.TargetObject;
-                //        Log.Info("Follow:" + followTargetObject.TargetObject.Name);
-
-                //    }
-                //}
-                if (!Follow)
-                {
-                    SetFollowStatus(false, "", "", new(255f, 0f, 0f, 1f));
-                    if (Following && !_spreading)
-                    {
-                        Stop(); 
-                        Following = false;
-                    }
-                    return;
-                }
-                var distance = Vector3.Distance(player.Position, FollowTargetObject.Position);
-
-                SetFollowStatus(true, FollowTargetObject.Name.ToString(), ((int)distance).ToString(), new(0f, 255f, 0f, 1f));
-
-                if ((distance > (FollowDistance + .1f)) && distance < 100)
-                {
-                    Following = true;
-                    MoveTo(FollowTargetObject.Position, FollowDistance + .1f);
-                }
-                else if (Following)
-                {
-                    Following = false;
-                    Stop();
-                }
-            }
-            catch (Exception e)
-            {
-                Log.Error(e.ToString());
-                SetFollowStatus(false, "", "", new(255f, 0f, 0f, 1f));
-                if (Following)
-                {
-                    Following = false;
-                    Stop();
-                }
-                //throw;
-            }
-        }
-        else
-        {
-            SetFollowStatus(false, "No follow target set", "", new(255f, 0f, 0f, 1f));
-            if (Following)
-            {
-                Following = false;
-                Stop();
-            }
-        }
+        MoveTo(FollowTargetObject?.Position, FollowDistance);
     }
+
     public void Dispose()
     {
         //RemoveAllWindows and Dispose of them, Disable FrameworkUpdate and remove Commands
-        StopAllMovement();
+        Follow = false;
         WindowSystem.RemoveAllWindows();
         MainWindow.Dispose();
-        Framework.Update -= OnGameFrameworkUpdate;
+        Framework.Update -= Framework_Update;
         Commands.RemoveHandler("/mbt");
         Commands.RemoveHandler("/bc");
         ECommonsMain.Dispose();
@@ -348,45 +215,32 @@ public class MBT : IDalamudPlugin
         _messagebusSend.Dispose();
         _overrideMovement.Dispose();
     }
+
     private void OpenMainUI() => MainWindow.IsOpen = true;
     
-    internal void SetFollow(bool on)
-    {
-        if (on)
-        {
-            Follow = true;
-            _spreading = false;
-        }
-        else
-        {
-            Follow = false;
-            Following = false;
-        }
-        Stop();
-    }
     private void OnCommand(string command, string args)
     {
         //In response to the slash command, just display our main ui or turn Follow on or off
 
         if (args.Contains("FOLLOW ON", StringComparison.CurrentCultureIgnoreCase) || args.Contains("FON", StringComparison.CurrentCultureIgnoreCase))
-            SetFollow(true);
+            Follow = true;
         else if (args.Contains("FOLLOW OFF", StringComparison.CurrentCultureIgnoreCase) || args.Contains("FOFF", StringComparison.CurrentCultureIgnoreCase))
-            SetFollow(false);
+            Follow = false;
         else if (args.Contains("COMETOME ", StringComparison.CurrentCultureIgnoreCase))
         {
-            var go = GetGameObjectFromName(args[9..]);
+            var go = Objects.FirstOrDefault(s => s.Name.ExtractText().ToString().Equals(args[9..]));
             if (go != null)
             {
-                StopAllMovement();
+                Follow = false;
                 MoveTo(go.Position, 0.1f);
             }
         }
         else if (args.Contains("CTM ", StringComparison.CurrentCultureIgnoreCase))
         {
-            var go = GetGameObjectFromName(args[4..]);
+            var go = Objects.FirstOrDefault(s => s.Name.ExtractText().ToString().Equals(args[4..]));
             if (go != null)
             {
-                StopAllMovement();
+                Follow = false;
                 MoveTo(go.Position, 0.1f);
             }
         }
@@ -408,7 +262,7 @@ public class MBT : IDalamudPlugin
         }
         else if (args.Contains("SPREAD", StringComparison.CurrentCultureIgnoreCase))
         {
-            Stop();
+            Follow = false;
             Spread();
         }
         else if (args.Contains("ACCEPTDUTY", StringComparison.CurrentCultureIgnoreCase) || args.Contains("AD", StringComparison.CurrentCultureIgnoreCase))
@@ -428,8 +282,7 @@ public class MBT : IDalamudPlugin
 
     private void OnCommandBC(string command, string args)
     {
-        if (ClientState.LocalPlayer is null) { return; }
-        if (args == null) { return; }
+        if (!Player.Available || args.IsNullOrEmpty()) return;
 
         if (!args.Contains("FW=", StringComparison.CurrentCultureIgnoreCase) || !args.Contains("C=", StringComparison.CurrentCultureIgnoreCase))
         {
@@ -445,32 +298,17 @@ public class MBT : IDalamudPlugin
         var ARGSc = forWho + " " + rest;
 
         if (ARGSc.Contains("ALLBUTME"))
-            _messagebusSend.PublishAsync(Encoding.UTF8.GetBytes(ARGSc.Replace("ALLBUTME", "ALLBUT" + ClientState.LocalPlayer.Name.ToString().ToUpper().Replace(" ", ""))));
+            _messagebusSend.PublishAsync(Encoding.UTF8.GetBytes(ARGSc.Replace("ALLBUTME", "ALLBUT" + Player.Name.Replace(" ", string.Empty, StringComparison.CurrentCultureIgnoreCase))));
         else
             _messagebusSend.PublishAsync(Encoding.UTF8.GetBytes(ARGSc));
     }
     
     private void DrawUI() => WindowSystem.Draw();
-    
-    private void StopAllMovement()
-    {
-        Follow = false;
-        Following = false;
-        _spreading = false;
-        Stop();
-    }
 
-    private void Stop()
+    private void MoveTo(Vector3? position, float precision = 0.1f)
     {
-        if (VNavmesh_IPCSubscriber.Path_IsRunning())
-            VNavmesh_IPCSubscriber.Path_Stop();
+        if (position == null) return;
 
-        if (_overrideMovement.Enabled)
-            _overrideMovement.Enabled = false;
-    }
-
-    private void MoveTo(Vector3 position, float precision = 0.1f)
-    {
         if (Configuration.UseNavmesh)
         {
             if (_overrideMovement.Enabled)
@@ -479,7 +317,7 @@ public class MBT : IDalamudPlugin
             if (VNavmesh_IPCSubscriber.Path_GetTolerance() != precision)
                 VNavmesh_IPCSubscriber.Path_SetTolerance(precision);
 
-            VNavmesh_IPCSubscriber.SimpleMove_PathfindAndMoveTo(position, false);
+            VNavmesh_IPCSubscriber.SimpleMove_PathfindAndMoveTo(position.Value, false);
         }
         else
         {
@@ -489,7 +327,7 @@ public class MBT : IDalamudPlugin
             if (_overrideMovement.Precision != precision)
                 _overrideMovement.Precision = precision;
 
-            _overrideMovement.DesiredPosition = position;
+            _overrideMovement.DesiredPosition = position.Value;
         }
     }
 }
