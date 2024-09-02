@@ -1,31 +1,18 @@
 ﻿using System;
 using System.Numerics;
-using System.Xml.Linq;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using ECommons;
 using ECommons.DalamudServices;
+using ECommons.ImGuiMethods;
 using ImGuiNET;
 using MBT.IPC;
 
 namespace MBT.Windows;
 
-public class MainWindow : Window, IDisposable
+public class MainWindow(MBT Plugin) : Window(
+    $"Multi Boxer Toolkit(0.0.0.{Plugin.Configuration.Version}): /mbt###MBT"), IDisposable
 {
-    private readonly MBT Plugin;
-
-    public MainWindow(MBT plugin) : base(
-        "Multi Boxer Toolkit: /mbt###MBT", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoResize)
-    {
-        SizeConstraints = new WindowSizeConstraints
-        {
-            MinimumSize = new Vector2(406, 285),
-            MaximumSize = new Vector2(406, 285)
-        };
-
-        Plugin = plugin;
-    }
-
     public void Dispose() { }
 
     public override void Draw()
@@ -50,30 +37,29 @@ public class MainWindow : Window, IDisposable
             ImGui.TextColored(new Vector4(0f, 1f, 0f, 1f), "Navmesh Loading:");
             ImGui.ProgressBar(VNavmesh_IPCSubscriber.Nav_BuildProgress(), new(200, 0));
         }
-        ImGui.Text("Follow:");
-        ImGui.SameLine(0, 5);
-        ImGui.TextColored(Plugin.Follow ? new(0f, 1f, 0f, 1f) : new(1f, 0f, 0f, 1f), $" {(Plugin.Follow ? "On" : "Off")}");
-        ImGui.SameLine(0, 5);
-        ImGui.TextColored(Plugin.Follow ? new(0f, 1f, 0f, 1f) : new(1f, 0f, 0f, 1f), $"Name: {(Plugin.FollowTargetObject != null ? $"{Plugin.FollowTargetObject.Name.ExtractText()}" : $"{Plugin.FollowTarget} not found")}");
-        ImGui.SameLine(0, 5);
-        ImGui.TextColored(Plugin.Follow ? new(0f, 1f, 0f, 1f) : new(1f, 0f, 0f, 1f), $"Distance: {Plugin.PlayerDistance} <= {Plugin.FollowDistance}");
-        if (ImGui.Checkbox("Follow Enabed", ref _follow))
+        ImGui.PushStyleColor(ImGuiCol.Text, Plugin.Follow ? new Vector4(0f, 1f, 0f, 1f) : new Vector4(1f, 0f, 0f, 1f));
+        ImGui.TextWrapped($"Follow: {(Plugin.Follow ? "On" : "Off")} Name: {(Plugin.followTargetObject != null ? $"{Plugin.FollowTargetObject?.Name.ExtractText()}" : $"{Plugin.FollowTarget} not found")} Distance: {Plugin.PlayerDistance:F1} <= {Plugin.FollowDistance} Moving To: {Plugin.FollowTargetPosition:F1}");
+        ImGui.PopStyleColor();
+        ImGui.NewLine();
+        if (ImGuiEx.CheckboxWrapped("Follow Enabed", ref _follow))
             Plugin.Follow = _follow;
-        ImGui.SameLine(0, 5);
         using (ImRaii.Disabled(!VNavmesh_IPCSubscriber.Nav_IsReady() || !VNavmesh_IPCSubscriber.IsEnabled))
         {
-            if (ImGui.Checkbox("Use Navmesh", ref Plugin.Configuration.UseNavmesh))
+            if (ImGuiEx.CheckboxWrapped("Use Navmesh", ref Plugin.Configuration.UseNavmesh))
                 Plugin.Configuration.Save();
         }
         if (!VNavmesh_IPCSubscriber.IsEnabled)
         {
             ImGui.SameLine(0, 2);
-            ImGui.TextColored(new Vector4(255f, 0, 0, 1f), "(Requires vnavmesh plugin)");
+            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(255f, 0, 0, 1f));
+            ImGui.TextWrapped("(Requires vnavmesh plugin)");
         }
+        ImGui.PushItemWidth(ImGui.GetContentRegionAvail().X - 250);
         ImGui.InputFloat("Follow Distance", ref Plugin.FollowDistance);
         ImGui.InputTextWithHint("##FollowTarget", "Follow Target", ref Plugin.FollowTarget, 20);
         ImGui.SameLine(0, 5);
         if (ImGui.Button("Add Current Target"))
             Plugin.FollowTarget = Svc.Targets.Target != null ? Svc.Targets.Target.Name.TextValue : string.Empty;
+        ImGui.PopItemWidth();
     }
 }

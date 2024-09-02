@@ -20,6 +20,8 @@ using Dalamud.Game.ClientState.Objects.Types;
 using ECommons.Throttlers;
 using ECommons.GameHelpers;
 using MBT.Windows;
+using System.Runtime.InteropServices;
+using Dalamud.IoC;
 namespace MBT;
 
 /// <summary>
@@ -28,6 +30,7 @@ namespace MBT;
 
 public class MBT : IDalamudPlugin
 {
+    [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
     public string Name => "MBT";
     public static MBT Plugin { get; private set; }
     public Configuration Configuration { get; init; }
@@ -54,7 +57,36 @@ public class MBT : IDalamudPlugin
     internal float FollowDistance = 1;
     internal float PlayerDistance => Player.Available && FollowTargetObject != null ? Vector3.Distance(Player.Position, FollowTargetObject.Position) : 0;
     internal string FollowTarget = string.Empty;
-    internal IGameObject? FollowTargetObject => FollowTargetObject != null && FollowTargetObject.Name.TextValue.Equals(FollowTarget, StringComparison.CurrentCultureIgnoreCase) ? FollowTargetObject : Objects.FirstOrDefault(s => s.Name.ExtractText().ToString().Equals(FollowTarget));
+    internal IGameObject? followTargetObject = null;
+    internal IGameObject? FollowTargetObject
+    {
+        get
+        {
+            if (followTargetObject == null || !followTargetObject.Name.TextValue.Equals(FollowTarget, StringComparison.CurrentCultureIgnoreCase))
+                return followTargetObject = Objects.FirstOrDefault(s => s.Name.ExtractText().ToString().Equals(FollowTarget));
+            else
+                return followTargetObject;
+        }
+        set => followTargetObject = value;
+    }
+    internal Vector3 FollowTargetPosition = Vector3.Zero;
+    internal bool FollowTargetPositionChanged
+    {
+        get
+        {
+            if (FollowTargetObject != null && FollowTargetPosition != FollowTargetObject.Position && PlayerDistance > FollowDistance)
+            {
+                FollowTargetPosition = FollowTargetObject.Position;
+                return true;
+            }
+            else
+            {
+                if (FollowTargetObject == null || PlayerDistance <= FollowDistance)
+                    FollowTargetPosition = Vector3.Zero;
+                return false;
+            }
+        }
+    }
 
     private bool _follow = false;
     private readonly OverrideMovement _overrideMovement;
@@ -71,8 +103,9 @@ public class MBT : IDalamudPlugin
         try
         {
             Plugin = this;
-            ECommonsMain.Init(pluginInterface, this);
-            
+            ECommonsMain.Init(pluginInterface, this, Module.All, Module.DalamudReflector);
+            Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+            Configuration.Version = PluginInterface.Manifest.AssemblyVersion.Revision;
             //Create MainWindow UI
             MainWindow = new MainWindow(this);
             WindowSystem.AddWindow(MainWindow);
@@ -81,7 +114,7 @@ public class MBT : IDalamudPlugin
             Commands.AddHandler("/bc", new CommandInfo(OnCommandBC)
             {
                 HelpMessage = "/bc fw=toon1,toon2,ETC or all or allbutme or allbut,toon1,toon2,ETC (Remove Space from ToonsFullName) C=/commandname args\"\n" +
-                "example: /bc FW=ALL C=/mbt ft Toon Name"
+                "example: /bc FW=ALL C=/mbt ft ToonName"
             });
             Commands.AddHandler("/mbt", new CommandInfo(OnCommand)
             {
@@ -104,7 +137,7 @@ public class MBT : IDalamudPlugin
             _messagebusSpread.MessageReceived +=
                 (sender, e) => MessageReceivedSpread(Encoding.UTF8.GetString((byte[])e.Message));
 
-            //_exitDuty = Marshal.GetDelegateForFunctionPointer<ExitDutyDelegate>(SigScanner.ScanText("40 53 48 83 ec 20 48 8b 05 ?? ?? ?? ?? 0f b6 d9"));
+            _exitDuty = Marshal.GetDelegateForFunctionPointer<ExitDutyDelegate>(SigScanner.ScanText("E8 ?? ?? ?? ?? 41 B2 01 EB 39"));
 
             _overrideMovement = new();
             _ipcProvider = new();
@@ -194,10 +227,10 @@ public class MBT : IDalamudPlugin
 
     private void Framework_Update(IFramework framework)
     {
-        if (!Player.Available || !EzThrottler.Throttle("Framework_Update", 50))
-            return;
+        if (!Player.Available || !EzThrottler.Throttle("Framework_Update", 50)) return;
 
-        MoveTo(FollowTargetObject?.Position, FollowDistance);
+        if (FollowTargetPositionChanged)
+            MoveTo(FollowTargetPosition, FollowDistance);
     }
 
     public void Dispose()
@@ -269,11 +302,11 @@ public class MBT : IDalamudPlugin
         {
             AcceptDuty();
         }
-        /*else if (args.Contains("EXITDUTY", StringComparison.CurrentCultureIgnoreCase) || args.Contains("ED", StringComparison.CurrentCultureIgnoreCase))
+        else if (args.Contains("EXITDUTY", StringComparison.CurrentCultureIgnoreCase) || args.Contains("ED", StringComparison.CurrentCultureIgnoreCase))
         {
             //maybe make this have to be pressed / called / invoked twice to prevent accidental exiting
             _exitDuty.Invoke((char)0);
-        }*/
+        }
         else if (MainWindow.IsOpen)
             MainWindow.IsOpen = false;
         else
@@ -305,9 +338,9 @@ public class MBT : IDalamudPlugin
     
     private void DrawUI() => WindowSystem.Draw();
 
-    private void MoveTo(Vector3? position, float precision = 0.1f)
+    private void MoveTo(Vector3 position, float precision = 0.1f)
     {
-        if (position == null) return;
+        if (position == Vector3.Zero) return;
 
         if (Configuration.UseNavmesh)
         {
@@ -317,17 +350,20 @@ public class MBT : IDalamudPlugin
             if (VNavmesh_IPCSubscriber.Path_GetTolerance() != precision)
                 VNavmesh_IPCSubscriber.Path_SetTolerance(precision);
 
-            VNavmesh_IPCSubscriber.SimpleMove_PathfindAndMoveTo(position.Value, false);
+            VNavmesh_IPCSubscriber.SimpleMove_PathfindAndMoveTo(position, false);
         }
         else
         {
             if (VNavmesh_IPCSubscriber.Path_IsRunning())
                 VNavmesh_IPCSubscriber.Path_Stop();
 
+            if (!_overrideMovement.Enabled)
+                _overrideMovement.Enabled = true;
+
             if (_overrideMovement.Precision != precision)
                 _overrideMovement.Precision = precision;
 
-            _overrideMovement.DesiredPosition = position.Value;
+            _overrideMovement.DesiredPosition = position;
         }
     }
 }
