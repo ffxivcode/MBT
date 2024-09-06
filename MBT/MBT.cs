@@ -56,14 +56,14 @@ public class MBT : IDalamudPlugin
 
     internal float FollowDistance = 1;
     internal float PlayerDistance => Player.Available && FollowTargetObject != null ? Vector3.Distance(Player.Position, FollowTargetObject.Position) : 0;
-    internal string FollowTarget = string.Empty;
+    internal (ulong, string) FollowTarget = (0, string.Empty);
     internal IGameObject? followTargetObject = null;
     internal IGameObject? FollowTargetObject
     {
         get
         {
-            if (followTargetObject == null || !followTargetObject.Name.TextValue.Equals(FollowTarget, StringComparison.CurrentCultureIgnoreCase))
-                return followTargetObject = Objects.FirstOrDefault(s => s.Name.ExtractText().ToString().Equals(FollowTarget));
+            if (followTargetObject == null || !followTargetObject.Name.TextValue.Equals(FollowTarget.Item2, StringComparison.CurrentCultureIgnoreCase) || followTargetObject.GameObjectId != FollowTarget.Item1)
+                return followTargetObject = Objects.FirstOrDefault(x => x.GameObjectId == FollowTarget.Item1) ?? Objects.FirstOrDefault(x => x.Name.ExtractText().Equals(FollowTarget.Item2, StringComparison.InvariantCultureIgnoreCase)) ?? null;
             else
                 return followTargetObject;
         }
@@ -279,11 +279,11 @@ public class MBT : IDalamudPlugin
         }
         else if (args.Contains("FOLLOWTARGET ", StringComparison.CurrentCultureIgnoreCase))
         {
-            FollowTarget = args[13..];
+            FollowTarget.Item2 = args[13..];
         }
         else if (args.Contains("FT ", StringComparison.CurrentCultureIgnoreCase))
         {
-            FollowTarget = args[3..];
+            FollowTarget.Item2 = args[3..];
         }
         else if (args.Contains("FOLLOWDISTANCE ", StringComparison.CurrentCultureIgnoreCase))
         {

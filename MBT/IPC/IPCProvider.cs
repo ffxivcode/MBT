@@ -11,7 +11,7 @@ namespace MBT.IPC
         }
 
         [EzIPC] public void SetFollowStatus(bool on) => MBT.Plugin.Follow = true;
-        [EzIPC] public void SetFollowTarget(string name) => MBT.Plugin.FollowTarget = name;
+        [EzIPC] public void SetFollowTarget(string name) => MBT.Plugin.FollowTarget.Item2 = name;
         [EzIPC] public void SetFollowDistance(int distance) => MBT.Plugin.FollowDistance = distance;
         [EzIPC] public bool GetFollowStatus() => MBT.Plugin.Follow;
         [EzIPC] public float GetFollowDistance() => MBT.Plugin.FollowDistance;
