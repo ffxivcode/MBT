@@ -133,9 +133,9 @@ public class MBT : IDalamudPlugin
             PluginInterface.UiBuilder.OpenMainUi += OpenMainUI;
 
             _messagebusReceive.MessageReceived +=
-                (sender, e) => MessageReceived(Encoding.UTF8.GetString((byte[])e.Message));
+                (sender, e) => MessageReceived(Encoding.UTF8.GetString(e.Message.ToArray()));
             _messagebusSpread.MessageReceived +=
-                (sender, e) => MessageReceivedSpread(Encoding.UTF8.GetString((byte[])e.Message));
+                (sender, e) => MessageReceivedSpread(Encoding.UTF8.GetString(e.Message.ToArray()));
 
             _exitDuty = Marshal.GetDelegateForFunctionPointer<ExitDutyDelegate>(SigScanner.ScanText("E8 ?? ?? ?? ?? 41 B2 01 EB 39"));
 
@@ -166,7 +166,7 @@ public class MBT : IDalamudPlugin
         {
             var j = i + 1;
             Log.Info("OnCommandSpread: PartyList: " + partyList[i] + " : " + playerGameObjectId + "," + partyList[i] + "," + "*" + j + "*");
-            _messagebusSpread.PublishAsync(Encoding.UTF8.GetBytes(playerGameObjectId + "," + partyList[i] + "," + "*" + j +"*"));
+            _messagebusSpread.PublishAsync(BinaryData.FromString(playerGameObjectId + "," + partyList[i] + "," + "*" + j +"*"));
         }
     }
 
@@ -331,9 +331,9 @@ public class MBT : IDalamudPlugin
         var ARGSc = forWho + " " + rest;
 
         if (ARGSc.Contains("ALLBUTME"))
-            _messagebusSend.PublishAsync(Encoding.UTF8.GetBytes(ARGSc.Replace("ALLBUTME", "ALLBUT" + Player.Name.Replace(" ", string.Empty, StringComparison.CurrentCultureIgnoreCase))));
+            _messagebusSend.PublishAsync(BinaryData.FromString(ARGSc.Replace("ALLBUTME", "ALLBUT" + Player.Name.Replace(" ", string.Empty, StringComparison.CurrentCultureIgnoreCase))));
         else
-            _messagebusSend.PublishAsync(Encoding.UTF8.GetBytes(ARGSc));
+            _messagebusSend.PublishAsync(BinaryData.FromString(ARGSc));
     }
     
     private void DrawUI() => WindowSystem.Draw();
