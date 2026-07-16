@@ -7,6 +7,7 @@ using MBT.External;
 using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using ECommons.GameHelpers;
 
 namespace MBT.Movement;
 
@@ -111,11 +112,11 @@ public unsafe class OverrideMovement : IDisposable
 
     private (Angle h, Angle v)? DirectionToDestination(bool allowVertical)
     {
-        var player = Svc.ClientState.LocalPlayer;
-        if (player == null)
+        // var player = Player;
+        if (Player.Object == null)
             return null;
 
-        var dist = DesiredPosition - player.Position;
+        var dist = DesiredPosition - Player.Position;
         if (dist.LengthSquared() <= Precision * Precision)
             return null;
 
@@ -124,7 +125,7 @@ public unsafe class OverrideMovement : IDisposable
 
         var refDir = _legacyMode
             ? ((CameraEx*)CameraManager.Instance()->GetActiveCamera())->DirH.Radians() + 180.Degrees()
-            : player.Rotation.Radians();
+            : Player.Rotation.Radians();
         return (dirH - refDir, dirV);
     }
 

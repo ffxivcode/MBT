@@ -145,7 +145,7 @@ public class MBT : IDalamudPlugin
         catch (Exception e) { Log.Info($"Failed loading plugin\n{e}"); }
     }
 
-    private static unsafe void AcceptDuty() => Callback.Fire((AtkUnitBase*)GameGui.GetAddonByName("ContentsFinderConfirm", 1), true, 8);
+    private static unsafe void AcceptDuty() => Callback.Fire((AtkUnitBase*)GameGui.GetAddonByName("ContentsFinderConfirm", 1).Address, true, 8);
 
     private void Spread()
     {
@@ -315,7 +315,7 @@ public class MBT : IDalamudPlugin
 
     private void OnCommandBC(string command, string args)
     {
-        if (!Player.Available || args.IsNullOrEmpty()) return;
+        if (!Player.Available) return;
 
         if (!args.Contains("FW=", StringComparison.CurrentCultureIgnoreCase) || !args.Contains("C=", StringComparison.CurrentCultureIgnoreCase))
         {
