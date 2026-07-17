@@ -5,7 +5,7 @@
   "Punchline": "Multi-boxer tool kit",
   "Description": "A bunch of utilities to simplify multi-boxing, and a IPC broadcaster",
   "RepoUrl": "https://github.com/ffxivcode/MBT",
-  "DalamudApiLevel": "10",
+  "DalamudApiLevel": "15",
   "DownloadLinkInstall": "https://github.com/ffxivcode/DalamudPlugins/raw/main/MBT/latest.zip",
   "DownloadLinkUpdate": "https://github.com/ffxivcode/DalamudPlugins/raw/main/MBT/latest.zip",
   "ImageUrls": [

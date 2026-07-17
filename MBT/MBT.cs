@@ -25,7 +25,7 @@ using Dalamud.IoC;
 namespace MBT;
 
 /// <summary>
-/// MBT v11
+/// MBT v12
 /// </summary>
 
 public class MBT : IDalamudPlugin
